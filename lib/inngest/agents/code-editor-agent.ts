@@ -141,9 +141,7 @@ export const codeEditorAgentFunction = inngest.createFunction(
       agents: [codeEditorAgent],
       maxIter: 20,
       defaultState: state,
-      router: async ({ network, agentName }) => {
-        const iterations = network.history.length;
-        console.log(`[Router] Iteration ${iterations}, Last agent: ${agentName || 'none'}`);
+      router: async ({ network }) => {
         console.log(`[Router] Summary exists: ${!!network.state.data.summary}`);
         console.log(`[Router] Modifications: ${network.state.data.modifications.length}`);
         console.log(`[Router] Fixed code different: ${network.state.data.fixedCode !== network.state.data.originalCode}`);

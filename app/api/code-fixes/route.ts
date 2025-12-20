@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ fixes });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -107,7 +107,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Fix ID required" }, { status: 400 });
     }
 
-    const updateData: any = { status };
+    const updateData: Record<string, string | number | null> = { status };
     if (applied_at) {
       updateData.applied_at = applied_at;
     }

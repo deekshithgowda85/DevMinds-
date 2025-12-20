@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ sessions });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -93,7 +93,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Session ID required" }, { status: 400 });
     }
 
-    const updateData: any = {
+    const updateData: Record<string, string | number | null> = {
       session_name,
       status,
       error_count,

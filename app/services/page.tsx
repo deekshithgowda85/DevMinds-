@@ -1,6 +1,5 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { 
   Code2, 
   Database, 
@@ -151,7 +150,7 @@ export default function ServicesPage() {
           <Card className="p-8 md:p-12 text-center bg-gradient-to-br from-primary/10 to-primary/5">
             <h2 className="text-3xl font-bold mb-4">Ready to Start Your Project?</h2>
             <p className="text-muted-foreground mb-6 max-w-2xl mx-auto">
-              Let's discuss how I can help bring your ideas to life with cutting-edge technology and best practices.
+              Let&apos;s discuss how I can help bring your ideas to life with cutting-edge technology and best practices.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button size="lg" className="gap-2">
