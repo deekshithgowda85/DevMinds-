@@ -8,21 +8,21 @@ import About from "./components/About";
 import Footer from "./components/Footer";
 
 const projects = [
-  { title: "Multi-Agent Debugger", link: "/editor", thumbnail: "/api/placeholder/600/600" },
-  { title: "Code Analyzer Pro", link: "#", thumbnail: "/api/placeholder/600/600" },
-  { title: "DevOps Dashboard", link: "#", thumbnail: "/api/placeholder/600/600" },
-  { title: "AI Assistant", link: "#", thumbnail: "/api/placeholder/600/600" },
-  { title: "API Gateway", link: "#", thumbnail: "/api/placeholder/600/600" },
-  { title: "Database Manager", link: "#", thumbnail: "/api/placeholder/600/600" },
-  { title: "Cloud Deployment", link: "#", thumbnail: "/api/placeholder/600/600" },
-  { title: "Security Scanner", link: "#", thumbnail: "/api/placeholder/600/600" },
-  { title: "Performance Monitor", link: "#", thumbnail: "/api/placeholder/600/600" },
-  { title: "Test Automation", link: "#", thumbnail: "/api/placeholder/600/600" },
-  { title: "CI/CD Pipeline", link: "#", thumbnail: "/api/placeholder/600/600" },
-  { title: "Container Orchestration", link: "#", thumbnail: "/api/placeholder/600/600" },
-  { title: "Microservices Gateway", link: "#", thumbnail: "/api/placeholder/600/600" },
-  { title: "Real-time Analytics", link: "#", thumbnail: "/api/placeholder/600/600" },
-  { title: "ML Model Trainer", link: "#", thumbnail: "/api/placeholder/600/600" }
+  { title: "Multi-Agent Debugger", link: "/editor", thumbnail: "/new1.webp" },
+  { title: "Code Analyzer Pro", link: "#", thumbnail: "/new2.png" },
+  { title: "DevOps Dashboard", link: "#", thumbnail: "/new3.png" },
+  { title: "AI Assistant", link: "#", thumbnail: "/new4.webp" },
+  { title: "API Gateway", link: "#", thumbnail: "/new5.webp" },
+  { title: "Database Manager", link: "#", thumbnail: "/new6.png" },
+  { title: "Cloud Deployment", link: "#", thumbnail: "/new7.jpg" },
+  { title: "Security Scanner", link: "#", thumbnail: "/new11.jpg" },
+  { title: "Performance Monitor", link: "#", thumbnail: "/new9.webp" },
+  { title: "Test Automation", link: "#", thumbnail: "/new10.webp" },
+  { title: "CI/CD Pipeline", link: "#", thumbnail: "/images.jpg" },
+  { title: "Container Orchestration", link: "#", thumbnail: "/download.jpg" },
+  { title: "Microservices Gateway", link: "#", thumbnail: "/image 7.jpg" },
+  { title: "Real-time Analytics", link: "#", thumbnail: "/image10.jpg" },
+  { title: "ML Model Trainer", link: "#", thumbnail: "/image12.jpg" }
 ];
 
 export default function Home() {
