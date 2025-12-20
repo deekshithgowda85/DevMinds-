@@ -69,11 +69,20 @@ export class E2BSandboxManager {
     }
 
     try {
-      // Use find command to recursively list all files
-      const command = `find ${path} -type f 2>/dev/null || echo "No files found"`;
+      // First check if the path exists
+      const checkCmd = `test -d ${path} && echo "exists" || echo "not exists"`;
+      const checkProc = await this.sandbox.commands.run(checkCmd);
+      
+      if (checkProc.stdout.includes('not exists')) {
+        console.warn(`Path ${path} does not exist`);
+        return [];
+      }
+      
+      // Use find command to recursively list all files, excluding .git directory
+      const command = `find ${path} -type f ! -path "*/.git/*" 2>/dev/null | head -n 1000`;
       const proc = await this.sandbox.commands.run(command);
       
-      if (proc.exitCode !== 0 && !proc.stdout.includes('No files found')) {
+      if (proc.exitCode !== 0 && proc.stderr) {
         console.warn('listFiles command failed:', proc.stderr);
         return [];
       }
@@ -81,8 +90,10 @@ export class E2BSandboxManager {
       const files = proc.stdout
         .split('\n')
         .filter(f => f.trim() && !f.includes('No files found'))
-        .map(f => f.trim());
+        .map(f => f.trim())
+        .filter(f => !f.includes('.git/')); // Extra filter for .git files
       
+      console.log(`Found ${files.length} files in ${path}`);
       return files;
     } catch (error) {
       console.error('Failed to list files:', error);
@@ -207,7 +218,70 @@ export class E2BSandboxManager {
   }
 
   async cloneRepository(repoUrl: string, targetPath: string = '/workspace/repo'): Promise<ExecutionResult> {
-    return await this.runCommand(`git clone ${repoUrl} ${targetPath}`);
+    if (!this.sandbox) {
+      throw new Error('Sandbox not initialized');
+    }
+
+    try {
+      // First check if git is installed
+      const gitCheckCmd = `which git`;
+      const gitCheck = await this.sandbox.commands.run(gitCheckCmd);
+      console.log('Git check:', gitCheck.stdout, gitCheck.stderr);
+      
+      if (gitCheck.exitCode !== 0) {
+        console.error('Git is not installed in sandbox');
+        return {
+          stdout: '',
+          stderr: 'Git is not installed in the sandbox. Please ensure git is included in your E2B template.',
+          exitCode: 1,
+          error: 'Git not found',
+        };
+      }
+      
+      // Extract repository name from URL
+      const repoName = repoUrl.split('/').pop()?.replace('.git', '') || 'repo';
+      const actualTargetPath = `${targetPath}/${repoName}`;
+      
+      // First, remove the target path if it exists to avoid conflicts
+      const cleanupCmd = `rm -rf ${actualTargetPath}`;
+      await this.sandbox.commands.run(cleanupCmd);
+      
+      // Ensure target directory exists
+      const mkdirCmd = `mkdir -p ${targetPath}`;
+      await this.sandbox.commands.run(mkdirCmd);
+      
+      // Clone with minimal depth for faster cloning - let git create the repo folder
+      const cloneCmd = `cd ${targetPath} && git clone --depth 1 ${repoUrl}`;
+      console.log('Executing clone command:', cloneCmd);
+      console.log('Repository will be cloned to:', actualTargetPath);
+      
+      const result = await this.runCommand(cloneCmd);
+      
+      // Verify the clone by listing the directory
+      if (result.exitCode === 0) {
+        const lsCmd = `ls -la ${actualTargetPath}`;
+        const lsResult = await this.sandbox.commands.run(lsCmd);
+        console.log('Directory listing after clone:', lsResult.stdout);
+        
+        // Also find all files
+        const findCmd = `find ${actualTargetPath} -type f ! -path '*/.git/*' | head -n 50`;
+        const findResult = await this.sandbox.commands.run(findCmd);
+        console.log('Files found after clone:', findResult.stdout);
+        
+        // Return the actual path in stdout for reference
+        result.stdout = `${result.stdout}\nCloned to: ${actualTargetPath}\n${findResult.stdout}`;
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('Clone repository error:', error);
+      return {
+        stdout: '',
+        stderr: error instanceof Error ? error.message : 'Unknown clone error',
+        exitCode: 1,
+        error: error instanceof Error ? error.message : 'Unknown clone error',
+      };
+    }
   }
 
   async gitCommit(path: string, message: string): Promise<ExecutionResult> {

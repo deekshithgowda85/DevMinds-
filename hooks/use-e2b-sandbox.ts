@@ -107,6 +107,41 @@ export function useE2BSandbox() {
     [session]
   );
 
+  const runCommand = useCallback(
+    async (command: string): Promise<ExecutionResult> => {
+      if (!session) {
+        throw new Error('Sandbox not initialized');
+      }
+
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch('/api/sandbox/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: session.sessionId,
+            command,
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Command execution failed');
+        }
+
+        return data;
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        setError(errorMessage);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [session]
+  );
+
   const writeFile = useCallback(
     async (path: string, content: string): Promise<FileOperation> => {
       if (!session) {
@@ -396,6 +431,7 @@ export function useE2BSandbox() {
     initializeSandbox,
     closeSandbox,
     executeCode,
+    runCommand,
     writeFile,
     readFile,
     deleteFile,

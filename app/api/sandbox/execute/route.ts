@@ -4,10 +4,31 @@ import { getSandboxInstance } from '@/lib/sandbox-instances';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { sessionId, language, code, filename } = body;
+    const { sessionId, language, code, filename, command } = body;
 
-    console.log('[execute] POST /api/sandbox/execute - Request:', { sessionId, language, filename });
+    console.log('[execute] POST /api/sandbox/execute - Request:', { sessionId, language, filename, command });
 
+    // Handle direct command execution
+    if (sessionId && command) {
+      console.log('[execute] Executing command:', command);
+      const sandbox = getSandboxInstance(sessionId);
+      
+      if (!sandbox) {
+        console.error('[execute] Sandbox not found for sessionId:', sessionId);
+        return NextResponse.json(
+          { error: 'Sandbox session not found. Please initialize first.' },
+          { status: 404 }
+        );
+      }
+
+      const result = await sandbox.runCommand(command);
+      return NextResponse.json({
+        success: result.exitCode === 0,
+        ...result,
+      });
+    }
+
+    // Handle code execution
     if (!sessionId || !language || !code) {
       return NextResponse.json(
         { error: 'Missing required fields: sessionId, language, code' },

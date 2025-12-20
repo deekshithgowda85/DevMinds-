@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import JSZip from "jszip";
 import Editor from "@monaco-editor/react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -14,8 +15,6 @@ import {
   Layers,
   Terminal,
   Save,
-  Upload,
-  Download,
   Moon,
   Sun,
   FileJson,
@@ -25,8 +24,6 @@ import {
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { createGitClient } from "@/lib/git-client";
-import { GitPanel } from "./components/GitPanel";
 import { CommitDialog } from "./components/CommitDialog";
 import { useE2BSandbox } from "@/hooks/use-e2b-sandbox";
 import { toast } from "sonner";
@@ -38,12 +35,20 @@ export default function EditorPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [activeView, setActiveView] = useState<"files" | "search" | "git" | "debug">("files");
   const [showOutput, setShowOutput] = useState(true);
+  const [showAiAgent, setShowAiAgent] = useState(true);
   const [selectedFile, setSelectedFile] = useState("");
   const [files, setFiles] = useState<Array<{path: string, content: string}>>([]);
   const [newFileName, setNewFileName] = useState("");
   const { resolvedTheme, setTheme } = useTheme();
-  const [gitClient, setGitClient] = useState<ReturnType<typeof createGitClient> | null>(null);
+  const [mounted, setMounted] = useState(false);
   const repoPath = '/workspace/repo';
+  const [showFileMenu, setShowFileMenu] = useState(false);
+  const fileButtonRef = useRef<HTMLButtonElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [repoUrlInput, setRepoUrlInput] = useState("");
+  const [terminalCommand, setTerminalCommand] = useState("");
+  const [sidebarWidth, setSidebarWidth] = useState(280);
+  const [isResizing, setIsResizing] = useState(false);
   
   // E2B Sandbox integration
   const {
@@ -57,15 +62,38 @@ export default function EditorPage() {
     deleteFile,
     listFiles,
     cloneRepository,
+    runCommand,
     gitCommit,
     gitPush,
     gitPull,
   } = useE2BSandbox();
 
-  // Initialize gitClient only on client side
+  // Initialize on client side
   useEffect(() => {
-    setGitClient(createGitClient());
+    setMounted(true);
   }, []);
+
+  // Handle sidebar resize
+  const startResizing = () => setIsResizing(true);
+  const stopResizing = () => setIsResizing(false);
+
+  useEffect(() => {
+    const handleResize = (e: MouseEvent) => {
+      if (isResizing) {
+        const newWidth = e.clientX - 48;
+        if (newWidth >= 200 && newWidth <= 600) {
+          setSidebarWidth(newWidth);
+        }
+      }
+    };
+
+    document.addEventListener('mousemove', handleResize);
+    document.addEventListener('mouseup', stopResizing);
+    return () => {
+      document.removeEventListener('mousemove', handleResize);
+      document.removeEventListener('mouseup', stopResizing);
+    };
+  }, [isResizing]);
 
   // Initialize sandbox on mount
   useEffect(() => {
@@ -283,57 +311,166 @@ export default function EditorPage() {
       return;
     }
 
+    if (!repoUrl.trim()) {
+      toast.error('Please enter a repository URL');
+      return;
+    }
+
     try {
+      setOutput(['⏳ Cloning repository...', '', `URL: ${repoUrl}`, `Target: ${repoPath}`]);
       toast.info('Cloning repository...');
-      const result = await cloneRepository(repoUrl, repoPath);
+      console.log('Starting clone:', repoUrl, 'to', repoPath);
       
-      if (result.success) {
-        toast.success('Repository cloned successfully!');
+      const result = await cloneRepository(repoUrl, repoPath);
+      console.log('Clone result:', result);
+      
+      if (result.success || result.exitCode === 0) {
         setOutput([
-          '✓ Repository cloned',
+          '✓ Repository cloned successfully!',
           '',
           'Output:',
-          result.stdout,
+          result.stdout || 'Clone completed',
+          result.stderr || '',
           '',
-          `Path: ${repoPath}`
+          `Path: ${repoPath}`,
+          '',
+          '⏳ Loading files...'
         ]);
+        toast.success('Repository cloned! Loading files...');
         
-        // List files in the cloned repo and update file tree
-        try {
-          console.log('Listing files in:', repoPath);
-          const fileList = await listFiles(repoPath);
-          console.log('Files in cloned repo:', fileList);
-          console.log('Number of files found:', fileList.length);
-          
-          if (fileList.length === 0) {
-            toast.warning('Repository cloned but no files found. It might be empty.');
-            return;
+        // Wait for filesystem to sync
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        // Extract repo name and construct the actual path
+        const repoName = repoUrl.split('/').pop()?.replace('.git', '') || 'repo';
+        const actualPath = `${repoPath}/${repoName}`;
+        
+        console.log('Attempting to load files from cloned repository');
+        console.log('Repository name:', repoName);
+        console.log('Expected path:', actualPath);
+        
+        // Try to find files in the cloned repository
+        const pathsToTry = [
+          actualPath,
+          repoPath,
+          '/workspace',
+        ];
+        
+        let filesFound = false;
+        for (const tryPath of pathsToTry) {
+          try {
+            console.log('===== Trying path:', tryPath, '=====');
+            const fileList = await listFiles(tryPath);
+            console.log(`Found ${fileList.length} files in ${tryPath}:`, fileList.slice(0, 10));
+            
+            if (fileList.length > 0) {
+              const filesWithContent = fileList.map(filepath => ({
+                path: filepath,
+                content: ''
+              }));
+              
+              console.log('Setting files state with', filesWithContent.length, 'files');
+              setFiles(filesWithContent);
+              console.log('Switching to files view');
+              
+              setOutput(prev => [
+                ...prev, 
+                '', 
+                `✓ Found ${fileList.length} files!`,
+                `📁 Location: ${tryPath}`,
+                '',
+                'Sample files:',
+                ...fileList.slice(0, 5).map(f => `  - ${f}`),
+                fileList.length > 5 ? `  ... and ${fileList.length - 5} more` : '',
+                '',
+                'Files loaded in Explorer. Click on any file to view.'
+              ]);
+              toast.success(`Loaded ${fileList.length} files from ${repoName}`);
+              setRepoUrlInput('');
+              setActiveView('files');
+              filesFound = true;
+              break;
+            }
+          } catch (error) {
+            console.error(`Failed to list files in ${tryPath}:`, error);
           }
-          
-          // Update files state with the cloned files
-          const filesWithContent = fileList.map(filepath => ({
-            path: filepath,
-            content: '' // Content will be loaded when file is opened
-          }));
-          
-          console.log('Setting files state with:', filesWithContent);
-          setFiles(filesWithContent);
-          toast.success(`Found ${fileList.length} files in repository`);
-        } catch (error) {
-          console.error('Failed to list files:', error);
-          toast.warning('Repository cloned but failed to list files');
+        }
+        
+        if (!filesFound) {
+          setOutput(prev => [
+            ...prev, 
+            '', 
+            '⚠ No files found in any of these paths:',
+            ...pathsToTry.map(p => `  - ${p}`),
+            '',
+            'Repository might be empty or using a different structure.',
+            'Check the Terminal Output tab for git command results.'
+          ]);
+          toast.warning('Clone completed but no files found. Check Terminal Output for details.');
         }
       } else {
         toast.error('Failed to clone repository');
         setOutput([
           '✗ Clone failed',
           '',
+          'Exit code:', String(result.exitCode),
+          '',
           'Error:',
-          result.stderr || result.error || 'Unknown error'
+          result.stderr || result.error || 'Unknown error',
+          '',
+          'Possible reasons:',
+          '- Git is not installed in the E2B sandbox',
+          '- Repository URL is incorrect or inaccessible',
+          '- Repository is private (public access required)',
+          '- Network issues',
+          '',
+          'Tip: Make sure the repository URL is correct and publicly accessible',
+          'Example: https://github.com/username/repository'
         ]);
+        console.error('Clone failed:', result);
       }
     } catch (error) {
-      toast.error('Clone error: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      console.error('Clone error:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      toast.error('Clone error: ' + errorMsg);
+      setOutput([
+        '✗ Clone error',
+        '',
+        'Error:',
+        errorMsg,
+        '',
+        'Please check:',
+        '- Repository URL is correct',
+        '- Repository is public or you have access',
+        '- Internet connection is stable',
+        '- E2B sandbox has git installed'
+      ]);
+    }
+  };
+
+  const handleTerminalCommand = async () => {
+    if (!terminalCommand.trim() || !session) {
+      return;
+    }
+
+    const cmd = terminalCommand.trim();
+    setOutput(prev => [...prev, `$ ${cmd}`]);
+    setTerminalCommand('');
+
+    try {
+      const result = await runCommand(cmd);
+      
+      const outputLines: string[] = [];
+      if (result.stdout) outputLines.push(result.stdout);
+      if (result.stderr) outputLines.push(result.stderr);
+      if (result.exitCode !== 0) {
+        outputLines.push(`Exit code: ${result.exitCode}`);
+      }
+      
+      setOutput(prev => [...prev, ...outputLines]);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Command failed';
+      setOutput(prev => [...prev, `Error: ${errorMsg}`]);
     }
   };
 
@@ -443,8 +580,68 @@ export default function EditorPage() {
         <div className="flex items-center gap-4 flex-1">
           <div className="font-semibold px-2">Multi-Agent Debugger</div>
           <Separator orientation="vertical" className="h-6" />
-          <div className="flex gap-1 text-sm">
-            <Button variant="ghost" size="sm" className="h-8">File</Button>
+          <div className="flex gap-1 text-sm relative">
+            <Button
+              ref={fileButtonRef}
+              variant="ghost"
+              size="sm"
+              className="h-8"
+              onClick={() => setShowFileMenu((v) => !v)}
+            >
+              File
+            </Button>
+            {showFileMenu && (
+              <div
+                className="absolute top-8 left-0 z-50 w-44 rounded border bg-popover text-popover-foreground shadow-md"
+                onMouseLeave={() => setShowFileMenu(false)}
+              >
+                <button
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                  onClick={() => {
+                    setShowFileMenu(false);
+                    fileInputRef.current?.click();
+                  }}
+                >
+                  Import from Zip...
+                </button>
+                <button
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                  onClick={async () => {
+                    setShowFileMenu(false);
+                    try {
+                      if (!session) {
+                        toast.error('Sandbox not initialized');
+                        return;
+                      }
+                      if (files.length === 0) {
+                        toast.warning('No files to export');
+                        return;
+                      }
+                      const zip = new JSZip();
+                      for (const f of files) {
+                        const content = await readFile(f.path);
+                        const relPath = f.path.replace(repoPath + '/', '');
+                        zip.file(relPath, content);
+                      }
+                      const blob = await zip.generateAsync({ type: 'blob' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'workspace.zip';
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                      URL.revokeObjectURL(url);
+                      toast.success('Exported project as zip');
+                    } catch (err) {
+                      toast.error('Export failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
+                    }
+                  }}
+                >
+                  Export as Zip
+                </button>
+              </div>
+            )}
             <Button variant="ghost" size="sm" className="h-8">Edit</Button>
             <Button variant="ghost" size="sm" className="h-8">View</Button>
             <Button variant="ghost" size="sm" className="h-8">Run</Button>
@@ -470,8 +667,9 @@ export default function EditorPage() {
             size="sm"
             className="h-8 w-8 p-0"
             onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+            suppressHydrationWarning
           >
-            {resolvedTheme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {mounted && (resolvedTheme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />)}
           </Button>
           <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
             <Save className="h-4 w-4" />
@@ -481,6 +679,46 @@ export default function EditorPage() {
           </Button>
         </div>
       </div>
+
+      {/* Hidden file input for Import */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".zip,application/zip"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          if (!session) {
+            toast.error('Sandbox not initialized');
+            return;
+          }
+          try {
+            const zip = await JSZip.loadAsync(file);
+            const entries = Object.keys(zip.files);
+            if (entries.length === 0) {
+              toast.warning('Zip is empty');
+              return;
+            }
+            // Write each file to sandbox, preserve structure under repoPath
+            for (const entryName of entries) {
+              const entry = zip.files[entryName];
+              if (!entry || entry.dir) continue; // skip directories
+              const content = await entry.async('string');
+              const target = `${repoPath}/${entryName.replace(/^\/+/, '')}`;
+              await writeFile(target, content);
+            }
+            // Refresh files list
+            const fileList = await listFiles(repoPath);
+            setFiles(fileList.map((p) => ({ path: p, content: '' })));
+            toast.success('Imported zip into workspace');
+          } catch (err) {
+            toast.error('Import failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
+          } finally {
+            e.target.value = '';
+          }
+        }}
+      />
 
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
@@ -526,7 +764,16 @@ export default function EditorPage() {
           <div className="flex-1" />
           
           <Button
-            variant="ghost"
+            variant={showAiAgent ? "secondary" : "ghost"}
+            size="sm"
+            className="h-9 w-9 p-0"
+            onClick={() => setShowAiAgent(!showAiAgent)}
+            title="Toggle AI Agent"
+          >
+            <Code className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={showOutput ? "secondary" : "ghost"}
             size="sm"
             className="h-9 w-9 p-0"
             onClick={() => setShowOutput(!showOutput)}
@@ -537,16 +784,37 @@ export default function EditorPage() {
         </div>
 
         {/* Sidebar - File Explorer/Search/etc */}
-        <div className="w-64 border-r flex flex-col bg-background overflow-hidden">
-          <div className="h-10 border-b flex items-center px-3 font-semibold text-sm">
-            {activeView === "files" && "EXPLORER"}
-            {activeView === "search" && "SEARCH"}
-            {activeView === "git" && "SOURCE CONTROL"}
-            {activeView === "debug" && "DEBUG"}
+        <div className="border-r flex flex-col bg-background overflow-hidden" style={{ width: sidebarWidth }}>
+          <div className="h-10 border-b flex items-center px-3 font-semibold text-sm justify-between">
+            <span>
+              {activeView === "files" && "EXPLORER"}
+              {activeView === "search" && "SEARCH"}
+              {activeView === "git" && "SOURCE CONTROL"}
+              {activeView === "debug" && "DEBUG"}
+            </span>
+            {activeView === "files" && session && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0"
+                onClick={async () => {
+                  try {
+                    const fileList = await listFiles(repoPath);
+                    setFiles(fileList.map(p => ({ path: p, content: '' })));
+                    toast.success(`Refreshed: ${fileList.length} files found`);
+                  } catch (error) {
+                    toast.error('Failed to refresh files');
+                  }
+                }}
+                title="Refresh files"
+              >
+                <RefreshCw className="h-3 w-3" />
+              </Button>
+            )}
           </div>
           
-          <ScrollArea className="flex-1">
-            {activeView === "files" && (
+          {activeView === "files" && (
+            <ScrollArea className="flex-1">
               <div className="p-2">
                 {/* Create New File Section */}
                 <div className="mb-4 space-y-2">
@@ -635,8 +903,10 @@ export default function EditorPage() {
                   })}
                 </div>
               </div>
+            </ScrollArea>
             )}
             {activeView === "search" && (
+            <ScrollArea className="flex-1">
               <div className="p-4">
                 <div className="space-y-2">
                   <input
@@ -649,12 +919,14 @@ export default function EditorPage() {
                   </p>
                 </div>
               </div>
+            </ScrollArea>
             )}
             {activeView === "git" && (
-              <div className="flex flex-col h-full">
+              <div className="flex flex-col flex-1 overflow-hidden">
                 {/* E2B Sandbox Git Controls */}
-                <div className="p-4 border-b space-y-3">
-                  <div className="flex items-center justify-between">
+                <div className="flex-shrink-0 border-b overflow-y-auto max-h-96">
+                  <div className="p-3 space-y-2">
+                      <div className="flex items-center justify-between">
                     <p className="text-sm font-semibold flex items-center gap-2">
                       <FolderGit2 className="h-4 w-4" />
                       E2B Sandbox
@@ -680,28 +952,41 @@ export default function EditorPage() {
                   
                   {session && (
                     <>
-                      <div className="space-y-2">
-                        <input
-                          type="text"
-                          placeholder="Repository URL"
-                          className="w-full px-3 py-1.5 text-sm border rounded-md bg-background"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && e.currentTarget.value) {
-                              handleCloneRepo(e.currentTarget.value);
-                            }
-                          }}
-                        />
-                        <div className="flex gap-2">
+                      <div className="space-y-1.5">
+                        <div className="flex gap-1.5">
+                          <input
+                            type="text"
+                            placeholder="Repository URL"
+                            className="flex-1 px-2 py-1 text-xs border rounded bg-background"
+                            value={repoUrlInput}
+                            onChange={(e) => setRepoUrlInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && repoUrlInput) {
+                                handleCloneRepo(repoUrlInput);
+                              }
+                            }}
+                          />
+                          <Button 
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => repoUrlInput && handleCloneRepo(repoUrlInput)}
+                            disabled={!session || !repoUrlInput}
+                            className="h-7 px-2 text-xs"
+                          >
+                            Clone
+                          </Button>
+                        </div>
+                        <div className="flex gap-1.5">
                           <CommitDialog 
                             onCommit={handleCommit}
                             disabled={!session}
                           />
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-1.5">
                           <Button 
                             size="sm" 
                             variant="secondary"
-                            className="flex-1 gap-1"
+                            className="flex-1 gap-1 h-7 text-xs"
                             onClick={handlePull}
                           >
                             Pull
@@ -709,7 +994,7 @@ export default function EditorPage() {
                           <Button 
                             size="sm" 
                             variant="secondary"
-                            className="flex-1 gap-1"
+                            className="flex-1 gap-1 h-7 text-xs"
                             onClick={handlePush}
                           >
                             Push
@@ -717,9 +1002,9 @@ export default function EditorPage() {
                         </div>
                       </div>
                       
-                      <Separator />
+                      <Separator className="my-1" />
                       
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-[10px] text-muted-foreground space-y-0.5">
                         <div>Session: {session.sessionId.slice(0, 8)}...</div>
                         {session.sandboxId && (
                           <div>Sandbox: {session.sandboxId.slice(0, 8)}...</div>
@@ -728,26 +1013,11 @@ export default function EditorPage() {
                     </>
                   )}
                 </div>
-                
-                {/* Browser Git Panel */}
-                <div className="flex-1 overflow-auto">
-                  <div className="p-2 border-b">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase px-2">
-                      Browser Git
-                    </p>
-                  </div>
-                  {gitClient && (
-                    <GitPanel 
-                      gitClient={gitClient}
-                      onRefresh={() => {
-                        console.log('Git operation completed');
-                      }}
-                    />
-                  )}
                 </div>
               </div>
             )}
             {activeView === "debug" && (
+            <ScrollArea className="flex-1">
               <div className="p-4">
                 <div className="space-y-2">
                   <p className="text-sm font-semibold">Debugger</p>
@@ -757,12 +1027,22 @@ export default function EditorPage() {
                   </Button>
                 </div>
               </div>
+            </ScrollArea>
             )}
-          </ScrollArea>
         </div>
 
-        {/* Editor Area */}
-        <div className="flex-1 flex flex-col min-w-0">
+        {/* Resize Handle */}
+        <div
+          className="w-1 hover:w-1.5 bg-border hover:bg-primary cursor-col-resize transition-all"
+          onMouseDown={startResizing}
+        />
+
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {/* Top Section - Editor and AI Agent */}
+          <div className="flex-1 flex overflow-hidden">
+            {/* Editor Area */}
+            <div className="flex-1 flex flex-col min-w-0">
           {/* Editor Tabs */}
           <div className="h-10 border-b flex items-center px-2 bg-muted/30 justify-between">
             <div className="flex items-center gap-2 text-sm min-w-0">
@@ -806,14 +1086,7 @@ export default function EditorPage() {
                 Save
               </Button>
               
-              <Button variant="outline" size="sm" className="h-7 gap-2">
-                <Upload className="h-3 w-3" />
-                Import
-              </Button>
-              <Button variant="outline" size="sm" className="h-7 gap-2">
-                <Download className="h-3 w-3" />
-                Export
-              </Button>
+              {/* Import/Export moved under File menu */}
               
               {!session && (
                 <Button
@@ -827,6 +1100,34 @@ export default function EditorPage() {
                   Init Sandbox
                 </Button>
               )}
+
+              {/* Panel Toggle Buttons */}
+              <div className="flex gap-1 ml-2 border-l pl-2">
+                {!showAiAgent && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1.5 px-2"
+                    onClick={() => setShowAiAgent(true)}
+                    title="Open AI Agent"
+                  >
+                    <Code className="h-3 w-3" />
+                    <span className="text-xs">AI Agent</span>
+                  </Button>
+                )}
+                {!showOutput && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1.5 px-2"
+                    onClick={() => setShowOutput(true)}
+                    title="Open Terminal"
+                  >
+                    <Terminal className="h-3 w-3" />
+                    <span className="text-xs">Terminal</span>
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -857,41 +1158,123 @@ export default function EditorPage() {
           </div>
         </div>
 
-        {/* Output Panel */}
+            {/* AI Agent Panel - Right Side */}
+            {showAiAgent && (
+              <div className="w-80 border-l flex flex-col bg-muted/20 overflow-hidden">
+                <div className="h-10 border-b flex items-center justify-between px-3 bg-muted/30">
+                  <div className="flex items-center gap-2 text-sm font-semibold">
+                    <Code className="h-4 w-4" />
+                    AI AGENT
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={() => setShowAiAgent(false)}
+                    title="Close AI Agent"
+                  >
+                    <span className="text-xs">×</span>
+                  </Button>
+                </div>
+                
+                <ScrollArea className="flex-1 p-3">
+                  <div className="space-y-3">
+                    <div className="p-3 border rounded-lg bg-background">
+                      <h3 className="text-sm font-semibold mb-2">Multi-Agent System</h3>
+                      <p className="text-xs text-muted-foreground">
+                        AI agents will appear here to help with debugging and code analysis.
+                      </p>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 p-2 border rounded bg-background">
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                        <span className="text-xs">System Ready</span>
+                      </div>
+                    </div>
+
+                    <div className="p-3 border rounded-lg bg-background">
+                      <h4 className="text-xs font-semibold mb-2">Available Agents:</h4>
+                      <div className="space-y-1.5">
+                        <div className="text-xs p-2 rounded border">
+                          <div className="font-medium">Code Analyzer</div>
+                          <div className="text-muted-foreground text-[10px]">Analyzes code structure</div>
+                        </div>
+                        <div className="text-xs p-2 rounded border">
+                          <div className="font-medium">Debugger Agent</div>
+                          <div className="text-muted-foreground text-[10px]">Finds and fixes bugs</div>
+                        </div>
+                        <div className="text-xs p-2 rounded border">
+                          <div className="font-medium">Test Generator</div>
+                          <div className="text-muted-foreground text-[10px]">Creates test cases</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </ScrollArea>
+
+                <div className="border-t p-2 bg-muted/30">
+                  <div className="text-xs text-muted-foreground flex items-center justify-between">
+                    <span>Multi-Agent Debugger</span>
+                    <span className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${session ? 'bg-green-500' : 'bg-gray-500'}`} />
+                      {session ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+        {/* Terminal Panel - Bottom */}
         {showOutput && (
-          <div className="w-80 border-l flex flex-col bg-muted/20 overflow-hidden">
+          <div className="h-64 border-t flex flex-col bg-muted/20 overflow-hidden">
             <div className="h-10 border-b flex items-center justify-between px-3 bg-muted/30">
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <Terminal className="h-4 w-4" />
-                TERMINAL OUTPUT
+                TERMINAL
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 text-xs"
-                onClick={() => setOutput([])}
-              >
-                Clear
-              </Button>
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-xs"
+                  onClick={() => setOutput([])}
+                >
+                  Clear
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={() => setShowOutput(false)}
+                  title="Close Terminal"
+                >
+                  <span className="text-xs">×</span>
+                </Button>
+              </div>
             </div>
             
-            <ScrollArea className="flex-1 p-4">
+            <ScrollArea className="flex-1 p-3">
               {output.length === 0 ? (
                 <div className="text-muted-foreground text-sm italic">
-                  Console output will appear here. Click &quot;Run&quot; to execute your code.
+                  Interactive terminal. Type commands below or click &quot;Run&quot; to execute code.
                 </div>
               ) : (
-                <div className="space-y-1 font-mono text-xs">
+                <div className="space-y-0.5 font-mono text-xs">
                   {output.map((line, index) => (
                     <div 
                       key={index} 
                       className={`
-                        ${line.startsWith('ERROR:') ? 'text-red-500' : ''}
+                        ${line.startsWith('$') ? 'text-green-400 font-semibold' : ''}
+                        ${line.startsWith('ERROR:') || line.startsWith('Error:') ? 'text-red-500' : ''}
                         ${line.startsWith('WARNING:') ? 'text-yellow-500' : ''}
+                        ${line.startsWith('✓') ? 'text-green-500' : ''}
+                        ${line.startsWith('✗') || line.startsWith('⚠') ? 'text-yellow-500' : ''}
+                        ${line.startsWith('⏳') ? 'text-blue-500' : ''}
                         whitespace-pre-wrap break-words
                       `}
                     >
-                      <span className="text-muted-foreground mr-2">[{index + 1}]</span>
                       {line}
                     </div>
                   ))}
@@ -899,7 +1282,32 @@ export default function EditorPage() {
               )}
             </ScrollArea>
 
+            {/* Terminal Input */}
             <div className="border-t p-2 bg-muted/30">
+              <div className="flex gap-2 items-center mb-2">
+                <span className="text-green-400 font-mono text-sm">$</span>
+                <input
+                  type="text"
+                  value={terminalCommand}
+                  onChange={(e) => setTerminalCommand(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleTerminalCommand();
+                    }
+                  }}
+                  placeholder="Type command (e.g., ls, pwd, git status)..."
+                  className="flex-1 px-2 py-1 text-xs font-mono border rounded bg-background"
+                  disabled={!session}
+                />
+                <Button
+                  size="sm"
+                  onClick={handleTerminalCommand}
+                  disabled={!session || !terminalCommand.trim()}
+                  className="h-7 px-2 text-xs"
+                >
+                  Run
+                </Button>
+              </div>
               <div className="text-xs text-muted-foreground flex items-center justify-between">
                 <span>
                   {language === "javascript" && "JavaScript Runtime"}
@@ -908,13 +1316,14 @@ export default function EditorPage() {
                   {language === "cpp" && "G++ Compiler"}
                 </span>
                 <span className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${isRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`} />
-                  {isRunning ? 'Running' : 'Ready'}
+                  <span className={`w-2 h-2 rounded-full ${session ? 'bg-green-500' : 'bg-gray-500'}`} />
+                  {session ? 'Connected' : 'Disconnected'}
                 </span>
               </div>
             </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* Status Bar */}
