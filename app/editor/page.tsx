@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import JSZip from "jszip";
 import Editor from "@monaco-editor/react";
 import { useTheme } from "next-themes";
@@ -55,7 +55,7 @@ const getLanguageFromFile = (filepath: string): string => {
   return languageMap[ext] || 'plaintext';
 };
 
-export default function EditorPage() {
+function EditorContent() {
   const [language, setLanguage] = useState<"javascript" | "python" | "java" | "cpp">("javascript");
   const [code, setCode] = useState("");
   const [output, setOutput] = useState<string[]>([]);
@@ -1670,5 +1670,20 @@ export default function EditorPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function EditorPage() {
+  return (
+    <Suspense fallback={
+      <div className="h-screen w-full flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Loading editor...</p>
+        </div>
+      </div>
+    }>
+      <EditorContent />
+    </Suspense>
   );
 }
