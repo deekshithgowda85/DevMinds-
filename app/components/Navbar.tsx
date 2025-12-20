@@ -1,11 +1,16 @@
 "use client";
 
 import Link from "next/link";
+<<<<<<< HEAD
 import { signIn, signOut, useSession } from 'next-auth/react';
 
 const Navbar = () => {
   const { data: session } = useSession();
 
+=======
+
+const Navbar = () => {
+>>>>>>> 43af0cdb86ebed7b53c65975454e486665e8198e
   const handleScroll = (id: string) => {
     const element = document.getElementById(id);
     if (element) {
@@ -52,6 +57,7 @@ const Navbar = () => {
             >
               Try Debugger
             </Link>
+<<<<<<< HEAD
             {session ? (
               <div className="flex items-center space-x-4">
                 <span className="text-gray-300">Welcome, {session.user?.name}</span>
@@ -76,6 +82,8 @@ const Navbar = () => {
                 <span>Sign In with Google</span>
               </button>
             )}
+=======
+>>>>>>> 43af0cdb86ebed7b53c65975454e486665e8198e
           </div>
         </div>
       </div>
