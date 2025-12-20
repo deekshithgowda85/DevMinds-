@@ -1,20 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { Menu, Moon, Sun } from "lucide-react";
+import { Menu, Moon, Sun, LogOut, User } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useTheme } from "next-themes";
+import { useSession, signOut } from "next-auth/react";
 
 const Navbar = () => {
   const { theme, setTheme } = useTheme();
+  const { data: session, status } = useSession();
 
   const handleScroll = (id: string) => {
     const element = document.getElementById(id);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth' });
     }
+  };
+
+  const handleSignOut = () => {
+    signOut({ callbackUrl: "/" });
   };
 
   return (
@@ -56,6 +62,33 @@ const Navbar = () => {
             <span className="sr-only">Toggle theme</span>
           </Button>
           <Separator orientation="vertical" className="h-6 md:h-8" />
+          
+          {status === "loading" ? (
+            <div className="h-8 w-8 md:h-9 md:w-9 animate-pulse bg-muted rounded-full" />
+          ) : session ? (
+            <div className="flex items-center space-x-2">
+              <span className="hidden md:inline text-sm text-muted-foreground">
+                {session.user?.name || session.user?.email}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleSignOut}
+                className="h-8 w-8 md:h-9 md:w-9"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="sr-only">Sign out</span>
+              </Button>
+            </div>
+          ) : (
+            <Link href="/auth/login">
+              <Button variant="outline" className="hidden md:inline-flex h-8 md:h-9 px-3 md:px-4 text-xs md:text-sm">
+                <User className="h-4 w-4 mr-2" />
+                Sign In
+              </Button>
+            </Link>
+          )}
+          
           <Link href="/editor">
             <Button className="hidden md:inline-flex h-8 md:h-9 rounded-full bg-foreground px-3 md:px-4 text-xs md:text-sm font-medium text-background hover:bg-foreground/90">
               Try Debugger
@@ -92,6 +125,30 @@ const Navbar = () => {
                 >
                   Editor
                 </Link>
+                
+                {session ? (
+                  <div className="flex flex-col space-y-2 pt-4 border-t">
+                    <span className="text-sm text-muted-foreground">
+                      Signed in as {session.user?.name || session.user?.email}
+                    </span>
+                    <Button
+                      variant="outline"
+                      onClick={handleSignOut}
+                      className="w-full justify-start"
+                    >
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Sign Out
+                    </Button>
+                  </div>
+                ) : (
+                  <Link href="/auth/login">
+                    <Button variant="outline" className="w-full justify-start">
+                      <User className="h-4 w-4 mr-2" />
+                      Sign In
+                    </Button>
+                  </Link>
+                )}
+                
                 <Link href="/editor">
                   <Button className="h-7 w-full rounded-full bg-foreground px-3 text-sm font-normal text-background hover:bg-foreground/90">
                     Try Debugger
