@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import Editor from "@monaco-editor/react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
-import type { ApiComponent } from "@/components/file-viewer";
 import {
   PlayIcon,
   FileCode,
@@ -21,181 +20,75 @@ import {
   Sun,
   FileJson,
   Code,
+  FolderGit2,
+  RefreshCw,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { createGitClient } from "@/lib/git-client";
 import { GitPanel } from "./components/GitPanel";
-
-// Sample project structure for the file viewer
-const sampleProject: ApiComponent = {
-  name: "project-files",
-  version: "1.0.0",
-  files: [
-    {
-      path: "src/index.ts",
-      content: `// Main entry point
-import { fibonacci } from './utils';
-
-console.log("Starting application...");
-
-for (let i = 0; i < 10; i++) {
-  console.log(\`fibonacci(\${i}) = \${fibonacci(i)}\`);
-}`,
-    },
-    {
-      path: "src/utils.ts",
-      content: `// Utility functions
-export function fibonacci(n: number): number {
-  if (n <= 1) return n;
-  return fibonacci(n - 1) + fibonacci(n - 2);
-}
-
-export function factorial(n: number): number {
-  if (n <= 1) return 1;
-  return n * factorial(n - 1);
-}`,
-    },
-    {
-      path: "src/types.ts",
-      content: `// Type definitions
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-}
-
-export interface ApiResponse<T> {
-  data: T;
-  status: number;
-  message: string;
-}`,
-    },
-    {
-      path: "src/components/Button.tsx",
-      content: `import React from 'react';
-
-interface ButtonProps {
-  label: string;
-  onClick: () => void;
-  variant?: 'primary' | 'secondary';
-}
-
-export const Button: React.FC<ButtonProps> = ({ 
-  label, 
-  onClick, 
-  variant = 'primary' 
-}) => {
-  return (
-    <button 
-      onClick={onClick}
-      className={\`btn btn-\${variant}\`}
-    >
-      {label}
-    </button>
-  );
-};`,
-    },
-    {
-      path: "README.md",
-      content: `# Multi-Agent Debugger Project
-
-This is a sample project demonstrating the code editor functionality.
-
-## Features
-- File viewer
-- Code editor with Monaco
-- Syntax highlighting
-- Code execution
-
-## Getting Started
-1. Browse files in the file explorer
-2. Edit code in the editor
-3. Run code and see output`,
-    },
-    {
-      path: "package.json",
-      content: `{
-  "name": "multi-agent-debugger",
-  "version": "1.0.0",
-  "description": "Advanced debugging tool",
-  "main": "src/index.ts",
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
-  },
-  "dependencies": {
-    "react": "^19.0.0",
-    "next": "^16.0.0"
-  }
-}`,
-    },
-  ],
-};
-
-const defaultCode = {
-  javascript: `// JavaScript Code Runner
-function fibonacci(n) {
-  if (n <= 1) return n;
-  return fibonacci(n - 1) + fibonacci(n - 2);
-}
-
-console.log("Fibonacci sequence:");
-for (let i = 0; i < 10; i++) {
-  console.log(\`fibonacci(\${i}) = \${fibonacci(i)}\`);
-}`,
-  python: `# Python Code Runner
-def fibonacci(n):
-    if n <= 1:
-        return n
-    return fibonacci(n - 1) + fibonacci(n - 2)
-
-print("Fibonacci sequence:")
-for i in range(10):
-    print(f"fibonacci({i}) = {fibonacci(i)}")`,
-  java: `// Java Code Runner
-public class Main {
-    public static int fibonacci(int n) {
-        if (n <= 1) return n;
-        return fibonacci(n - 1) + fibonacci(n - 2);
-    }
-    
-    public static void main(String[] args) {
-        System.out.println("Fibonacci sequence:");
-        for (int i = 0; i < 10; i++) {
-            System.out.println("fibonacci(" + i + ") = " + fibonacci(i));
-        }
-    }
-}`,
-  cpp: `// C++ Code Runner
-#include <iostream>
-using namespace std;
-
-int fibonacci(int n) {
-    if (n <= 1) return n;
-    return fibonacci(n - 1) + fibonacci(n - 2);
-}
-
-int main() {
-    cout << "Fibonacci sequence:" << endl;
-    for (int i = 0; i < 10; i++) {
-        cout << "fibonacci(" << i << ") = " << fibonacci(i) << endl;
-    }
-    return 0;
-}`
-};
+import { CommitDialog } from "./components/CommitDialog";
+import { useE2BSandbox } from "@/hooks/use-e2b-sandbox";
+import { toast } from "sonner";
 
 export default function EditorPage() {
   const [language, setLanguage] = useState<"javascript" | "python" | "java" | "cpp">("javascript");
-  const [code, setCode] = useState(defaultCode.javascript);
+  const [code, setCode] = useState("");
   const [output, setOutput] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [activeView, setActiveView] = useState<"files" | "search" | "git" | "debug">("files");
   const [showOutput, setShowOutput] = useState(true);
-  const [selectedFile, setSelectedFile] = useState("Main.js");
+  const [selectedFile, setSelectedFile] = useState("");
+  const [files, setFiles] = useState<Array<{path: string, content: string}>>([]);
+  const [newFileName, setNewFileName] = useState("");
   const { resolvedTheme, setTheme } = useTheme();
-  const [gitClient] = useState(() => createGitClient());
+  const [gitClient, setGitClient] = useState<ReturnType<typeof createGitClient> | null>(null);
+  const repoPath = '/workspace/repo';
+  
+  // E2B Sandbox integration
+  const {
+    session,
+    loading: sandboxLoading,
+    initializeSandbox,
+    closeSandbox,
+    executeCode: executeInSandbox,
+    writeFile,
+    readFile,
+    deleteFile,
+    listFiles,
+    cloneRepository,
+    gitCommit,
+    gitPush,
+    gitPull,
+  } = useE2BSandbox();
+
+  // Initialize gitClient only on client side
+  useEffect(() => {
+    setGitClient(createGitClient());
+  }, []);
+
+  // Initialize sandbox on mount
+  useEffect(() => {
+    const init = async () => {
+      try {
+        console.log('Initializing E2B sandbox...');
+        const result = await initializeSandbox();
+        console.log('E2B Sandbox initialized:', result);
+        toast.success(`E2B Sandbox initialized: ${result.sessionId}`);
+      } catch (error) {
+        console.error('Failed to initialize sandbox:', error);
+        toast.error('Failed to initialize sandbox: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      }
+    };
+    
+    init();
+
+    // Cleanup on unmount
+    return () => {
+      closeSandbox();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleEditorChange = (value: string | undefined) => {
     setCode(value || "");
@@ -203,10 +96,249 @@ export default function EditorPage() {
 
   const handleLanguageChange = (newLang: "javascript" | "python" | "java" | "cpp") => {
     setLanguage(newLang);
-    setCode(defaultCode[newLang]);
-    const extensions = { javascript: 'js', python: 'py', java: 'java', cpp: 'cpp' };
-    setSelectedFile(`Main.${extensions[newLang]}`);
     setOutput([]);
+  };
+
+  // Create new file
+  const createNewFile = async () => {
+    console.log('Creating new file, session:', session);
+    
+    if (!session) {
+      toast.error('Sandbox not initialized. Please wait or refresh.');
+      return;
+    }
+
+    if (!newFileName.trim()) {
+      toast.error('Please enter a file name');
+      return;
+    }
+
+    try {
+      const filepath = `${repoPath}/${newFileName}`;
+      console.log('Writing file to:', filepath);
+      
+      await writeFile(filepath, '');
+      
+      setFiles(prev => [...prev, { path: filepath, content: '' }]);
+      setSelectedFile(filepath);
+      setCode('');
+      setNewFileName('');
+      toast.success('File created successfully');
+    } catch (error) {
+      console.error('File creation error:', error);
+      toast.error('Failed to create file: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  };
+
+  // Load file content
+  const loadFile = async (filepath: string) => {
+    if (!session) {
+      toast.error('Sandbox not initialized');
+      return;
+    }
+
+    try {
+      const content = await readFile(filepath);
+      setCode(content);
+      setSelectedFile(filepath);
+      
+      // Update language based on file extension
+      const ext = filepath.split('.').pop()?.toLowerCase();
+      if (ext === 'js' || ext === 'ts') setLanguage('javascript');
+      else if (ext === 'py') setLanguage('python');
+      else if (ext === 'java') setLanguage('java');
+      else if (ext === 'cpp' || ext === 'cc' || ext === 'cxx') setLanguage('cpp');
+    } catch (error) {
+      toast.error('Failed to load file: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  };
+
+  // Delete file
+  const handleDeleteFile = async (filepath: string) => {
+    if (!session) {
+      toast.error('Sandbox not initialized');
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to delete ${filepath}?`)) {
+      return;
+    }
+
+    try {
+      await deleteFile(filepath);
+      setFiles(prev => prev.filter(f => f.path !== filepath));
+      
+      if (selectedFile === filepath) {
+        setCode('');
+        setSelectedFile('');
+      }
+      
+      toast.success('File deleted successfully');
+    } catch (error) {
+      toast.error('Failed to delete file: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  };
+
+  // Create .gitignore file
+  const createGitignore = async () => {
+    if (!session) {
+      toast.error('Sandbox not initialized');
+      return;
+    }
+
+    const gitignoreContent = `# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+target/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+`;
+
+    try {
+      const filepath = `${repoPath}/.gitignore`;
+      await writeFile(filepath, gitignoreContent);
+      
+      setFiles(prev => [...prev, { path: filepath, content: gitignoreContent }]);
+      setSelectedFile(filepath);
+      setCode(gitignoreContent);
+      toast.success('.gitignore created successfully');
+    } catch (error) {
+      console.error('Failed to create .gitignore:', error);
+      toast.error('Failed to create .gitignore');
+    }
+  };
+
+  // Create README.md file
+  const createReadme = async () => {
+    if (!session) {
+      toast.error('Sandbox not initialized');
+      return;
+    }
+
+    const readmeContent = `# Multi-Agent Debugger Project
+
+## Overview
+This project uses E2B sandbox environment for collaborative code editing and execution.
+
+## Getting Started
+
+### Prerequisites
+- Node.js (v16 or higher)
+- npm or yarn
+- Git
+
+### Installation
+
+1. Clone the repository:
+\`\`\`bash
+git clone <repository-url>
+cd <repository-name>
+\`\`\`
+
+2. Install dependencies:
+\`\`\`bash
+npm install
+# or
+yarn install
+\`\`\`
+
+3. Set up environment variables:
+Create a \`.env.local\` file in the root directory:
+\`\`\`
+E2B_API_KEY=your_api_key_here
+\`\`\`
+
+4. Run the development server:
+\`\`\`bash
+npm run dev
+# or
+yarn dev
+\`\`\`
+
+5. Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Features
+- **Code Editor**: Monaco-based editor with multi-language support
+- **E2B Sandbox**: Execute code in isolated environments
+- **Git Integration**: Built-in Git operations (commit, push, pull)
+- **File Management**: Create, edit, and delete files in the sandbox
+- **Collaborative**: Multiple developers can work on the same codebase
+
+## Supported Languages
+- JavaScript/TypeScript
+- Python
+- Java
+- C++
+
+## Project Structure
+\`\`\`
+.
+├── app/                  # Next.js app directory
+├── components/           # React components
+├── lib/                  # Utility libraries
+├── hooks/                # Custom React hooks
+└── public/               # Static assets
+\`\`\`
+
+## Contributing
+1. Create a new branch for your feature
+2. Make your changes
+3. Test your code
+4. Submit a pull request
+
+## License
+MIT
+`;
+
+    try {
+      const filepath = `${repoPath}/README.md`;
+      await writeFile(filepath, readmeContent);
+      
+      setFiles(prev => [...prev, { path: filepath, content: readmeContent }]);
+      setSelectedFile(filepath);
+      setCode(readmeContent);
+      toast.success('README.md created successfully');
+    } catch (error) {
+      console.error('Failed to create README:', error);
+      toast.error('Failed to create README');
+    }
   };
 
   const runCode = async () => {
@@ -215,64 +347,254 @@ export default function EditorPage() {
     setShowOutput(true);
     
     try {
+      if (!session) {
+        toast.error('Sandbox not initialized. Initializing...');
+        await initializeSandbox();
+        return;
+      }
+
       const logs: string[] = [];
+      logs.push(`Executing ${language} code in E2B sandbox...`);
+      logs.push('---');
       
-      if (language === "javascript") {
-        // JavaScript execution
-        const customConsole = {
-          log: (...args: unknown[]) => {
-            logs.push(args.map(arg => 
-              typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-            ).join(' '));
-          },
-          error: (...args: unknown[]) => {
-            logs.push('ERROR: ' + args.map(arg => 
-              typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-            ).join(' '));
-          },
-          warn: (...args: unknown[]) => {
-            logs.push('WARNING: ' + args.map(arg => 
-              typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-            ).join(' '));
-          }
-        };
-        
-        const func = new Function('console', code);
-        func(customConsole);
-      } else if (language === "python") {
-        // Python simulation (browser-based)
-        logs.push('Python execution requires a backend server.');
-        logs.push('Sample output for demo:');
-        logs.push('Fibonacci sequence:');
-        for (let i = 0; i < 10; i++) {
-          const fib = (n: number): number => n <= 1 ? n : fib(n-1) + fib(n-2);
-          logs.push(`fibonacci(${i}) = ${fib(i)}`);
+      // Execute code in E2B sandbox
+      const result = await executeInSandbox(language, code);
+      
+      if (result.success) {
+        logs.push('✓ Execution completed successfully');
+        logs.push('');
+        if (result.stdout) {
+          logs.push('Output:');
+          logs.push(result.stdout);
         }
-      } else if (language === "java") {
-        // Java simulation (browser-based)
-        logs.push('Java execution requires a backend server with JDK.');
-        logs.push('Sample output for demo:');
-        logs.push('Fibonacci sequence:');
-        for (let i = 0; i < 10; i++) {
-          const fib = (n: number): number => n <= 1 ? n : fib(n-1) + fib(n-2);
-          logs.push(`fibonacci(${i}) = ${fib(i)}`);
+        if (result.stderr && result.stderr.trim()) {
+          logs.push('');
+          logs.push('Warnings/Errors:');
+          logs.push(result.stderr);
         }
-      } else if (language === "cpp") {
-        // C++ simulation (browser-based)
-        logs.push('C++ execution requires a backend server with g++ compiler.');
-        logs.push('Sample output for demo:');
-        logs.push('Fibonacci sequence:');
-        for (let i = 0; i < 10; i++) {
-          const fib = (n: number): number => n <= 1 ? n : fib(n-1) + fib(n-2);
-          logs.push(`fibonacci(${i}) = ${fib(i)}`);
+      } else {
+        logs.push('✗ Execution failed');
+        logs.push('');
+        if (result.stderr) {
+          logs.push('Error:');
+          logs.push(result.stderr);
+        }
+        if (result.error) {
+          logs.push(result.error);
         }
       }
       
-      setOutput(logs.length > 0 ? logs : ['Code executed successfully with no output']);
+      logs.push('');
+      logs.push(`Exit code: ${result.exitCode}`);
+      
+      setOutput(logs);
+      
+      if (result.success) {
+        toast.success('Code executed successfully!');
+      } else {
+        toast.error('Code execution failed');
+      }
     } catch (error) {
-      setOutput([`Error: ${error instanceof Error ? error.message : String(error)}`]);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      setOutput([
+        '✗ Execution error',
+        '',
+        'Error:',
+        errorMsg
+      ]);
+      toast.error('Execution error: ' + errorMsg);
     } finally {
       setIsRunning(false);
+    }
+  };
+
+  // Save current code to sandbox
+  const saveToSandbox = async () => {
+    if (!session) {
+      toast.error('Sandbox not initialized');
+      return;
+    }
+
+    if (!selectedFile) {
+      toast.error('No file selected. Create a new file first.');
+      return;
+    }
+
+    try {
+      await writeFile(selectedFile, code);
+      
+      // Update files list
+      setFiles(prev => {
+        const existing = prev.find(f => f.path === selectedFile);
+        if (existing) {
+          return prev.map(f => f.path === selectedFile ? { ...f, content: code } : f);
+        }
+        return [...prev, { path: selectedFile, content: code }];
+      });
+      
+      toast.success(`File saved: ${selectedFile}`);
+    } catch (error) {
+      toast.error('Failed to save file: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  };
+
+  // Clone repository to sandbox
+  const handleCloneRepo = async (repoUrl: string) => {
+    if (!session) {
+      toast.error('Sandbox not initialized');
+      return;
+    }
+
+    try {
+      toast.info('Cloning repository...');
+      const result = await cloneRepository(repoUrl, repoPath);
+      
+      if (result.success) {
+        toast.success('Repository cloned successfully!');
+        setOutput([
+          '✓ Repository cloned',
+          '',
+          'Output:',
+          result.stdout,
+          '',
+          `Path: ${repoPath}`
+        ]);
+        
+        // List files in the cloned repo and update file tree
+        try {
+          console.log('Listing files in:', repoPath);
+          const fileList = await listFiles(repoPath);
+          console.log('Files in cloned repo:', fileList);
+          console.log('Number of files found:', fileList.length);
+          
+          if (fileList.length === 0) {
+            toast.warning('Repository cloned but no files found. It might be empty.');
+            return;
+          }
+          
+          // Update files state with the cloned files
+          const filesWithContent = fileList.map(filepath => ({
+            path: filepath,
+            content: '' // Content will be loaded when file is opened
+          }));
+          
+          console.log('Setting files state with:', filesWithContent);
+          setFiles(filesWithContent);
+          toast.success(`Found ${fileList.length} files in repository`);
+        } catch (error) {
+          console.error('Failed to list files:', error);
+          toast.warning('Repository cloned but failed to list files');
+        }
+      } else {
+        toast.error('Failed to clone repository');
+        setOutput([
+          '✗ Clone failed',
+          '',
+          'Error:',
+          result.stderr || result.error || 'Unknown error'
+        ]);
+      }
+    } catch (error) {
+      toast.error('Clone error: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  };
+
+  // Commit changes in sandbox
+  const handleCommit = async (message: string) => {
+    if (!session) {
+      toast.error('Sandbox not initialized');
+      return;
+    }
+
+    try {
+      toast.info('Committing changes...');
+      const result = await gitCommit(repoPath, message);
+      
+      if (result.success) {
+        toast.success('Changes committed!');
+        setOutput([
+          '✓ Commit successful',
+          '',
+          'Output:',
+          result.stdout
+        ]);
+      } else {
+        toast.error('Commit failed');
+        setOutput([
+          '✗ Commit failed',
+          '',
+          'Error:',
+          result.stderr || result.error || 'Unknown error'
+        ]);
+      }
+    } catch (error) {
+      toast.error('Commit error: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  };
+
+  // Push changes from sandbox
+  const handlePush = async () => {
+    if (!session) {
+      toast.error('Sandbox not initialized');
+      return;
+    }
+
+    try {
+      toast.info('Pushing to remote...');
+      const result = await gitPush(repoPath);
+      
+      if (result.success) {
+        toast.success('Pushed successfully!');
+        setOutput([
+          '✓ Push successful',
+          '',
+          'Output:',
+          result.stdout
+        ]);
+      } else {
+        toast.error('Push failed');
+        setOutput([
+          '✗ Push failed',
+          '',
+          'Error:',
+          result.stderr || result.error || 'Unknown error'
+        ]);
+      }
+    } catch (error) {
+      toast.error('Push error: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  };
+
+  // Pull changes to sandbox
+  const handlePull = async () => {
+    if (!session) {
+      toast.error('Sandbox not initialized');
+      return;
+    }
+
+    try {
+      toast.info('Pulling from remote...');
+      const result = await gitPull(repoPath);
+      
+      if (result.success) {
+        toast.success('Pulled successfully!');
+        setOutput([
+          '✓ Pull successful',
+          '',
+          'Output:',
+          result.stdout
+        ]);
+      } else {
+        toast.error('Pull failed');
+        setOutput([
+          '✗ Pull failed',
+          '',
+          'Error:',
+          result.stderr || result.error || 'Unknown error'
+        ]);
+      }
+    } catch (error) {
+      toast.error('Pull error: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
   };
 
@@ -294,6 +616,17 @@ export default function EditorPage() {
         </div>
         
         <div className="flex items-center gap-2">
+          {/* Sandbox Status Indicator */}
+          <div className="flex items-center gap-2 px-2 py-1 rounded text-xs">
+            {sandboxLoading ? (
+              <span className="text-yellow-500">⏳ Initializing sandbox...</span>
+            ) : session ? (
+              <span className="text-green-500">✓ Sandbox ready: {session.sessionId.slice(0, 8)}...</span>
+            ) : (
+              <span className="text-red-500">✗ Sandbox not initialized</span>
+            )}
+          </div>
+          <Separator orientation="vertical" className="h-6" />
           <Button
             variant="ghost"
             size="sm"
@@ -377,13 +710,52 @@ export default function EditorPage() {
           <ScrollArea className="flex-1">
             {activeView === "files" && (
               <div className="p-2">
-                <div className="space-y-1">
-                  <div className="text-xs font-semibold text-muted-foreground uppercase px-2 py-1">
-                    {sampleProject.name}
+                {/* Create New File Section */}
+                <div className="mb-4 space-y-2">
+                  <div className="flex gap-1">
+                    <input
+                      type="text"
+                      placeholder="New file name..."
+                      value={newFileName}
+                      onChange={(e) => setNewFileName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') createNewFile();
+                      }}
+                      className="flex-1 px-2 py-1 text-xs border rounded bg-background"
+                      disabled={!session}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={createNewFile}
+                      disabled={!session || !newFileName.trim()}
+                      className="h-auto py-1 px-2"
+                    >
+                      <FileText className="h-3 w-3" />
+                    </Button>
                   </div>
-                  {sampleProject.files.map((file) => {
+                  {!session && (
+                    <p className="text-xs text-muted-foreground px-1">
+                      Initialize sandbox to create files
+                    </p>
+                  )}
+                </div>
+
+                <Separator className="my-2" />
+
+                {/* Files List */}
+                <div className="space-y-1">
+                  <div className="text-xs font-semibold text-muted-foreground uppercase px-2 py-1 flex items-center justify-between">
+                    <span>Sandbox Files</span>
+                    <span className="text-[10px]">{files.length}</span>
+                  </div>
+                  {files.length === 0 && (
+                    <div className="px-2 py-4 text-xs text-muted-foreground text-center">
+                      No files yet. Create a new file or clone a repository.
+                    </div>
+                  )}
+                  {files.map((file) => {
                     const fileName = file.path.split('/').pop() || file.path;
-                    const indent = (file.path.split('/').length - 1) * 12;
                     const isActive = selectedFile === file.path;
                     
                     // Determine file icon based on extension
@@ -391,26 +763,36 @@ export default function EditorPage() {
                       if (fileName.endsWith('.json')) return <FileJson className="h-4 w-4 flex-shrink-0 text-yellow-500" />;
                       if (fileName.endsWith('.md')) return <FileText className="h-4 w-4 flex-shrink-0 text-blue-500" />;
                       if (fileName.endsWith('.ts') || fileName.endsWith('.tsx')) return <Code className="h-4 w-4 flex-shrink-0 text-blue-400" />;
+                      if (fileName.endsWith('.js')) return <Code className="h-4 w-4 flex-shrink-0 text-yellow-600" />;
+                      if (fileName.endsWith('.py')) return <Code className="h-4 w-4 flex-shrink-0 text-blue-600" />;
+                      if (fileName.endsWith('.java')) return <Code className="h-4 w-4 flex-shrink-0 text-red-600" />;
+                      if (fileName.endsWith('.cpp')) return <Code className="h-4 w-4 flex-shrink-0 text-purple-600" />;
                       return <FileText className="h-4 w-4 flex-shrink-0" />;
                     };
                     
                     return (
-                      <button
+                      <div
                         key={file.path}
-                        className={`w-full text-left px-2 py-1 rounded text-sm flex items-center gap-2 truncate transition-colors ${
+                        className={`w-full text-left px-2 py-1 rounded text-sm flex items-center gap-2 group ${
                           isActive ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted'
                         }`}
-                        style={{ paddingLeft: `${8 + indent}px` }}
-                        onClick={() => {
-                          if (file.content) {
-                            setCode(file.content);
-                            setSelectedFile(file.path);
-                          }
-                        }}
                       >
-                        {getFileIcon()}
-                        <span className="truncate">{fileName}</span>
-                      </button>
+                        <button
+                          className="flex-1 flex items-center gap-2 truncate"
+                          onClick={() => loadFile(file.path)}
+                        >
+                          {getFileIcon()}
+                          <span className="truncate">{fileName}</span>
+                        </button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleDeleteFile(file.path)}
+                          className="h-auto p-1 opacity-0 group-hover:opacity-100"
+                        >
+                          <span className="text-xs">×</span>
+                        </Button>
+                      </div>
                     );
                   })}
                 </div>
@@ -431,13 +813,101 @@ export default function EditorPage() {
               </div>
             )}
             {activeView === "git" && (
-              <GitPanel 
-                gitClient={gitClient}
-                onRefresh={() => {
-                  // Refresh file tree or editor if needed
-                  console.log('Git operation completed, refresh if needed');
-                }}
-              />
+              <div className="flex flex-col h-full">
+                {/* E2B Sandbox Git Controls */}
+                <div className="p-4 border-b space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold flex items-center gap-2">
+                      <FolderGit2 className="h-4 w-4" />
+                      E2B Sandbox
+                    </p>
+                    {session && (
+                      <span className="text-xs px-2 py-1 bg-green-500/10 text-green-500 rounded">
+                        Active
+                      </span>
+                    )}
+                  </div>
+                  
+                  {!session && (
+                    <Button 
+                      size="sm" 
+                      className="w-full gap-2"
+                      onClick={initializeSandbox}
+                      disabled={sandboxLoading}
+                    >
+                      <RefreshCw className={`h-4 w-4 ${sandboxLoading ? 'animate-spin' : ''}`} />
+                      Initialize Sandbox
+                    </Button>
+                  )}
+                  
+                  {session && (
+                    <>
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          placeholder="Repository URL"
+                          className="w-full px-3 py-1.5 text-sm border rounded-md bg-background"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && e.currentTarget.value) {
+                              handleCloneRepo(e.currentTarget.value);
+                            }
+                          }}
+                        />
+                        <div className="flex gap-2">
+                          <CommitDialog 
+                            onCommit={handleCommit}
+                            disabled={!session}
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="secondary"
+                            className="flex-1 gap-1"
+                            onClick={handlePull}
+                          >
+                            Pull
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="secondary"
+                            className="flex-1 gap-1"
+                            onClick={handlePush}
+                          >
+                            Push
+                          </Button>
+                        </div>
+                      </div>
+                      
+                      <Separator />
+                      
+                      <div className="text-xs text-muted-foreground">
+                        <div>Session: {session.sessionId.slice(0, 8)}...</div>
+                        {session.sandboxId && (
+                          <div>Sandbox: {session.sandboxId.slice(0, 8)}...</div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+                
+                {/* Browser Git Panel */}
+                <div className="flex-1 overflow-auto">
+                  <div className="p-2 border-b">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase px-2">
+                      Browser Git
+                    </p>
+                  </div>
+                  {gitClient && (
+                    <GitPanel 
+                      gitClient={gitClient}
+                      onRefresh={() => {
+                        console.log('Git operation completed');
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
             )}
             {activeView === "debug" && (
               <div className="p-4">
@@ -477,13 +947,27 @@ export default function EditorPage() {
               
               <Button
                 onClick={runCode}
-                disabled={isRunning}
+                disabled={isRunning || !session}
                 size="sm"
                 className="h-7 gap-2"
+                title={!session ? "Initialize sandbox first" : "Run code in E2B sandbox"}
               >
                 <PlayIcon className="h-3 w-3" />
                 {isRunning ? "Running..." : "Run"}
               </Button>
+              
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-7 gap-2"
+                onClick={saveToSandbox}
+                disabled={!session}
+                title={!session ? "Initialize sandbox first" : "Save to E2B sandbox"}
+              >
+                <Save className="h-3 w-3" />
+                Save
+              </Button>
+              
               <Button variant="outline" size="sm" className="h-7 gap-2">
                 <Upload className="h-3 w-3" />
                 Import
@@ -492,6 +976,19 @@ export default function EditorPage() {
                 <Download className="h-3 w-3" />
                 Export
               </Button>
+              
+              {!session && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="h-7 gap-2 ml-2"
+                  onClick={initializeSandbox}
+                  disabled={sandboxLoading}
+                >
+                  <RefreshCw className={`h-3 w-3 ${sandboxLoading ? 'animate-spin' : ''}`} />
+                  Init Sandbox
+                </Button>
+              )}
             </div>
           </div>
 

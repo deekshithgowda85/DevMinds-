@@ -1,28 +1,44 @@
 # codedebugger - E2B Sandbox Template
 
-This is an E2B sandbox template that allows you to run code in a controlled environment.
+This is an E2B sandbox template that allows you to run code in a controlled environment for the Multi-Agent Debugger project.
 
 ## Prerequisites
 
 Before you begin, make sure you have:
 - An E2B account (sign up at [e2b.dev](https://e2b.dev))
 - Your E2B API key (get it from your [E2B dashboard](https://e2b.dev/dashboard))
-- Node.js and npm/yarn (or similar) installed
+- Node.js (v16 or higher) and npm installed
 
-## Configuration
+## For Collaborators: Getting Started
 
-1. Create a `.env` file in your project root or set the environment variable:
-   ```
-   E2B_API_KEY=your_api_key_here
-   ```
+If you're cloning this repository for the first time, follow these steps:
 
-## Installing Dependencies
-
+### 1. Clone the Repository
 ```bash
-npm install e2b
+git clone <repository-url>
+cd "Multi agent debugger/sandbox/codedebugger"
 ```
 
-## Building the Template
+### 2. Install Dependencies
+```bash
+npm install
+```
+
+**Note:** The `node_modules` folder is excluded from the repository via `.gitignore`. You must install dependencies after cloning.
+
+### 3. Configure Environment Variables
+Create a `.env` file in the **project root** (not in this folder):
+```bash
+# Navigate to project root
+cd ../..
+
+# Create .env file
+E2B_API_KEY=your_api_key_here
+```
+
+Get your E2B API key from: https://e2b.dev/dashboard
+
+### 4. Build the Template
 
 ```bash
 # For development
@@ -40,7 +56,10 @@ Once your template is built, you can use it in your E2B sandbox:
 import { Sandbox } from 'e2b'
 
 // Create a new sandbox instance
-const sandbox = await Sandbox.create('codedebugger')
+const sandbox = await Sandbox.create('codedebugger', {
+  apiKey: process.env.E2B_API_KEY,
+  timeoutMs: 10 * 60 * 1000 // 10 minutes
+})
 
 // Your sandbox is ready to use!
 console.log('Sandbox created successfully')

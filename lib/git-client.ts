@@ -5,6 +5,11 @@ import FS from '@isomorphic-git/lightning-fs';
 // Initialize filesystem for browser
 const fs = new FS('git-fs');
 
+// Type for git errors with code property
+interface GitError extends Error {
+  code?: string;
+}
+
 export interface GitConfig {
   name: string;
   email: string;
@@ -163,6 +168,7 @@ export class GitClient {
         fs,
         http,
         dir: this.dir,
+        remote,
         ref: branch,
         singleBranch: true,
         corsProxy: 'https://cors.isomorphic-git.org',
@@ -220,9 +226,9 @@ export class GitClient {
             ? 'Pulled successfully with local changes preserved'
             : 'Pulled successfully',
         };
-      } catch (mergeError: any) {
+      } catch (mergeError: unknown) {
         // Check if it's a merge conflict
-        if (mergeError.code === 'MergeNotSupportedError') {
+        if (mergeError instanceof Error && 'code' in mergeError && (mergeError as GitError).code === 'MergeNotSupportedError') {
           return {
             success: false,
             hasConflicts: true,
@@ -281,11 +287,12 @@ export class GitClient {
 
   // Get current branch
   async currentBranch(): Promise<string | undefined> {
-    return await git.currentBranch({
+    const branch = await git.currentBranch({
       fs,
       dir: this.dir,
       fullname: false,
     });
+    return branch || undefined;
   }
 
   // List branches

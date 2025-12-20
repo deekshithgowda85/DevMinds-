@@ -19,6 +19,7 @@
     "@radix-ui/react-slot": "^1.2.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "e2b": "^2.8.4",
     "framer-motion": "^12.23.26",
     "isomorphic-git": "^1.36.1",
     "lucide-react": "^0.562.0",
