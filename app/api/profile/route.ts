@@ -17,6 +17,26 @@ export async function GET(request: NextRequest) {
       .eq("id", user.id)
       .single();
 
+    // If profile doesn't exist, auto-create it
+    if (error && error.code === "PGRST116") {
+      const { data: newProfile, error: createError } = await supabase
+        .from("profiles")
+        .insert({
+          id: user.id,
+          email: user.email,
+          full_name: user.user_metadata?.full_name || "",
+          username: user.email?.split("@")[0] || "",
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        return NextResponse.json({ error: createError.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ profile: newProfile });
+    }
+
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }

@@ -40,6 +40,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Ensure profile exists before creating project
+    const { data: existingProfile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("id", user.id)
+      .single();
+
+    if (!existingProfile) {
+      // Create profile automatically
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .insert({
+          id: user.id,
+          email: user.email,
+          full_name: user.user_metadata?.full_name || null,
+          username: user.email?.split("@")[0] || null,
+        });
+
+      if (profileError) {
+        console.error("Error creating profile:", profileError);
+        // Continue anyway, the insert might fail with a better error message
+      }
+    }
+
     const body = await request.json();
     const { name, description, repository_url, language, framework, status, stars } = body;
 
