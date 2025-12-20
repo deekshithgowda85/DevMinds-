@@ -12,7 +12,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ExternalLink, Github, Star, Plus, Loader2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ExternalLink, Github, Star, Plus, Loader2, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Navbar from "../components/Navbar";
 import { useState, useEffect } from "react";
@@ -42,6 +52,9 @@ export default function MyProjectsPage() {
     language: "",
   });
   const [creating, setCreating] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchProjects();
@@ -104,10 +117,41 @@ export default function MyProjectsPage() {
         const error = await response.json();
         toast.error(error.error || "Failed to create project");
       }
-    } catch (error) {
+    } catch {
       toast.error("Error creating project");
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent, project: Project) => {
+    e.stopPropagation();
+    setProjectToDelete(project);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!projectToDelete) return;
+
+    setDeleting(true);
+    try {
+      const response = await fetch(`/api/projects?id=${projectToDelete.id}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        toast.success("Project deleted successfully");
+        setDeleteDialogOpen(false);
+        setProjectToDelete(null);
+        await fetchProjects();
+      } else {
+        const error = await response.json();
+        toast.error(error.error || "Failed to delete project");
+      }
+    } catch {
+      toast.error("Error deleting project");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -147,7 +191,7 @@ export default function MyProjectsPage() {
               <div className="max-w-md mx-auto">
                 <h3 className="text-2xl font-bold mb-2">No Projects Yet</h3>
                 <p className="text-muted-foreground mb-6">
-                  Get started by creating your first debugging project. Make sure you're signed in to save your projects.
+                  Get started by creating your first debugging project. Make sure you&apos;re signed in to save your projects.
                 </p>
                 <Button
                   onClick={() => setShowNewProjectDialog(true)}
@@ -230,6 +274,14 @@ export default function MyProjectsPage() {
                           <Github className="w-4 h-4" />
                         </Button>
                       )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={(e) => handleDeleteClick(e, project)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
                   </div>
                 </Card>
@@ -315,6 +367,36 @@ export default function MyProjectsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete <strong>{projectToDelete?.name}</strong>.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

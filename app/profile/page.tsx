@@ -43,13 +43,13 @@ export default function ProfilePage() {
         if (data.profile) {
           setProfile(data.profile);
           setEditedProfile(data.profile);
+          console.log("Profile loaded:", data.profile);
         }
-      } else if (response.status === 404 || response.status === 500) {
-        // Profile doesn't exist, start in edit mode
-        console.log("Profile not found, you can create one by editing");
-        setIsEditing(true);
       } else if (response.status === 401) {
         toast.error("Please sign in to view your profile");
+      } else {
+        console.error("Error fetching profile:", response.status);
+        toast.error("Error loading profile. Please try refreshing the page.");
       }
     } catch (error) {
       console.error("Error fetching profile:", error);

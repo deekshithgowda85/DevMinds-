@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import JSZip from "jszip";
 import Editor from "@monaco-editor/react";
 import { useTheme } from "next-themes";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   PlayIcon,
@@ -21,6 +22,7 @@ import {
   Code,
   FolderGit2,
   RefreshCw,
+  ArrowLeft,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -49,6 +51,9 @@ export default function EditorPage() {
   const [terminalCommand, setTerminalCommand] = useState("");
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [isResizing, setIsResizing] = useState(false);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const hasClonedRef = useRef(false);
   
   // E2B Sandbox integration
   const {
@@ -118,6 +123,24 @@ export default function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Auto-clone repository from URL params
+  useEffect(() => {
+    const autoClone = async () => {
+      const repoUrl = searchParams.get('repo');
+      if (repoUrl && session && !sandboxLoading && !hasClonedRef.current) {
+        hasClonedRef.current = true;
+        console.log('Auto-cloning repository from URL param:', repoUrl);
+        // Decode the URL in case it's encoded
+        const decodedUrl = decodeURIComponent(repoUrl);
+        setRepoUrlInput(decodedUrl);
+        await handleCloneRepo(decodedUrl);
+      }
+    };
+
+    autoClone();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, sandboxLoading]);
+
   const handleEditorChange = (value: string | undefined) => {
     setCode(value || "");
   };
@@ -166,17 +189,37 @@ export default function EditorPage() {
     }
 
     try {
+      console.log('Loading file:', filepath);
+      
+      // Verify file exists before trying to read
+      const verifyResult = await runCommand(`test -f "${filepath}" && echo "exists" || echo "not found"`);
+      if (verifyResult.stdout.includes('not found')) {
+        console.error('File not found:', filepath);
+        toast.error(`File not found: ${filepath}`);
+        return;
+      }
+      
       const content = await readFile(filepath);
+      console.log('File content loaded, length:', content.length);
       setCode(content);
       setSelectedFile(filepath);
       
+      // Update files array with content
+      setFiles(prev => prev.map(f => 
+        f.path === filepath ? { ...f, content } : f
+      ));
+      
       // Update language based on file extension
       const ext = filepath.split('.').pop()?.toLowerCase();
-      if (ext === 'js' || ext === 'ts') setLanguage('javascript');
+      if (ext === 'js' || ext === 'ts' || ext === 'tsx') setLanguage('javascript');
       else if (ext === 'py') setLanguage('python');
       else if (ext === 'java') setLanguage('java');
-      else if (ext === 'cpp' || ext === 'cc' || ext === 'cxx') setLanguage('cpp');
+      else if (ext === 'cpp' || ext === 'cc' || ext === 'cxx' || ext === 'h' || ext === 'hpp') setLanguage('cpp');
+      
+      const fileName = filepath.split('/').pop() || filepath;
+      toast.success(`Loaded ${fileName}`);
     } catch (error) {
+      console.error('Failed to load file:', error);
       toast.error('Failed to load file: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
   };
@@ -317,14 +360,33 @@ export default function EditorPage() {
     }
 
     try {
+      // Extract repo name
+      const repoName = repoUrl.split('/').pop()?.replace('.git', '') || 'repo';
+      
       setOutput(['⏳ Cloning repository...', '', `URL: ${repoUrl}`, `Target: ${repoPath}`]);
       toast.info('Cloning repository...');
       console.log('Starting clone:', repoUrl, 'to', repoPath);
       
+      // Clean up any existing repo directory
+      try {
+        const checkResult = await runCommand(`test -d ${repoPath}/${repoName} && echo "exists" || echo "not exists"`);
+        if (checkResult.stdout.includes('exists')) {
+          console.log('Directory exists, cleaning up...');
+          await runCommand(`rm -rf ${repoPath}/${repoName}`);
+          console.log('Cleanup complete');
+        }
+      } catch (cleanupError) {
+        console.log('Cleanup check skipped:', cleanupError);
+      }
+      
+      // Clone directly to repoPath (git will create repoName directory inside)
       const result = await cloneRepository(repoUrl, repoPath);
       console.log('Clone result:', result);
       
       if (result.success || result.exitCode === 0) {
+        // The actual cloned path will be repoPath/repoName
+        const clonedPath = `${repoPath}/${repoName}`;
+        
         setOutput([
           '✓ Repository cloned successfully!',
           '',
@@ -332,26 +394,22 @@ export default function EditorPage() {
           result.stdout || 'Clone completed',
           result.stderr || '',
           '',
-          `Path: ${repoPath}`,
+          `Path: ${clonedPath}`,
           '',
           '⏳ Loading files...'
         ]);
         toast.success('Repository cloned! Loading files...');
         
         // Wait for filesystem to sync
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        
-        // Extract repo name and construct the actual path
-        const repoName = repoUrl.split('/').pop()?.replace('.git', '') || 'repo';
-        const actualPath = `${repoPath}/${repoName}`;
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
         console.log('Attempting to load files from cloned repository');
         console.log('Repository name:', repoName);
-        console.log('Expected path:', actualPath);
+        console.log('Cloned path:', clonedPath);
         
         // Try to find files in the cloned repository
         const pathsToTry = [
-          actualPath,
+          clonedPath,
           repoPath,
           '/workspace',
         ];
@@ -370,6 +428,7 @@ export default function EditorPage() {
               }));
               
               console.log('Setting files state with', filesWithContent.length, 'files');
+              console.log('Sample file paths:', fileList.slice(0, 3));
               setFiles(filesWithContent);
               console.log('Switching to files view');
               
@@ -676,6 +735,15 @@ export default function EditorPage() {
           </Button>
           <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
             <Settings className="h-4 w-4" />
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="h-8 w-8 p-0"
+            onClick={() => router.push('/my-projects')}
+            title="Back to Projects"
+          >
+            <ArrowLeft className="h-4 w-4" />
           </Button>
         </div>
       </div>
