@@ -90,9 +90,9 @@ export default function Hero() {
               animate={{ scale: [1, 1.1, 1] }}
               transition={{ duration: 2, repeat: Infinity }}
             >
-              <CheckCircle className="h-10 w-10 text-green-400" />
+              <CheckCircle className="h-10 w-10 text-orange-400" />
             </motion.div>
-            <h3 className="text-2xl font-bold bg-linear-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent mb-2">Issue Detection</h3>
+            <h3 className="text-2xl font-bold bg-linear-to-r from-orange-400 to-yellow-400 bg-clip-text text-transparent mb-2">Issue Detection</h3>
             <p className="text-gray-300 text-sm">AI scanner identifies bugs, vulnerabilities, and code smells.</p>
           </motion.div>
           <motion.div
