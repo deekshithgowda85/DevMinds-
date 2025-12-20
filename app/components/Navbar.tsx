@@ -1,83 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { signIn, signOut, useSession } from 'next-auth/react';
 
 const Navbar = () => {
-  const [isSignedIn, setIsSignedIn] = useState(false);
-  const [userProfile, setUserProfile] = useState<any>(null);
-  const [auth2, setAuth2] = useState<any>(null);
-
-  useEffect(() => {
-    const initGoogleAuth = () => {
-      console.log('Initializing Google Auth');
-      if ((window as any).gapi) {
-        console.log('gapi available, loading auth2');
-        (window as any).gapi.load('auth2', () => {
-          console.log('auth2 loaded');
-          (window as any).gapi.auth2.init({
-            client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
-            scope: 'profile email'
-          }).then((auth: any) => {
-            console.log('auth2 initialized:', auth);
-            setAuth2(auth);
-            auth.isSignedIn.listen((signedIn: boolean) => {
-              console.log('Signed in status:', signedIn);
-              setIsSignedIn(signedIn);
-              if (signedIn) {
-                const user = auth.currentUser.get();
-                const profile = user.getBasicProfile();
-                setUserProfile({
-                  id: profile.getId(),
-                  name: profile.getName(),
-                  imageUrl: profile.getImageUrl(),
-                  email: profile.getEmail(),
-                });
-              } else {
-                setUserProfile(null);
-              }
-            });
-          }).catch((error: any) => {
-            console.error('Auth init error:', error);
-          });
-        });
-      } else {
-        console.log('gapi not available');
-      }
-    };
-
-    if ((window as any).gapi) {
-      initGoogleAuth();
-    } else {
-      console.log('Waiting for gapi');
-      // Wait for script to load
-      const checkGapi = setInterval(() => {
-        if ((window as any).gapi) {
-          clearInterval(checkGapi);
-          initGoogleAuth();
-        }
-      }, 100);
-    }
-  }, []);
-
-  const signIn = () => {
-    console.log('Sign in clicked, auth2:', auth2);
-    if (auth2) {
-      auth2.signIn().then(() => {
-        console.log('Sign in successful');
-      }).catch((error: any) => {
-        console.error('Sign in error:', error);
-      });
-    } else {
-      console.log('auth2 not ready');
-    }
-  };
-
-  const signOut = () => {
-    if (auth2) {
-      auth2.signOut();
-    }
-  };
+  const { data: session } = useSession();
 
   const handleScroll = (id: string) => {
     const element = document.getElementById(id);
@@ -125,11 +52,11 @@ const Navbar = () => {
             >
               Try Debugger
             </Link>
-            {isSignedIn ? (
+            {session ? (
               <div className="flex items-center space-x-4">
-                <span className="text-gray-300">Welcome, {userProfile?.name}</span>
+                <span className="text-gray-300">Welcome, {session.user?.name}</span>
                 <button
-                  onClick={signOut}
+                  onClick={() => signOut()}
                   className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition"
                 >
                   Sign Out
@@ -137,7 +64,7 @@ const Navbar = () => {
               </div>
             ) : (
               <button
-                onClick={signIn}
+                onClick={() => signIn('google')}
                 className="px-5 py-2.5 bg-white text-gray-900 rounded-xl hover:bg-gray-100 transition-all duration-300 font-medium shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center space-x-2"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
