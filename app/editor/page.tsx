@@ -30,6 +30,31 @@ import { CommitDialog } from "./components/CommitDialog";
 import { useE2BSandbox } from "@/hooks/use-e2b-sandbox";
 import { toast } from "sonner";
 
+// Helper function to detect language from file extension
+const getLanguageFromFile = (filepath: string): string => {
+  const ext = filepath.split('.').pop()?.toLowerCase() || '';
+  const languageMap: Record<string, string> = {
+    'js': 'javascript',
+    'jsx': 'javascript',
+    'ts': 'typescript',
+    'tsx': 'typescript',
+    'py': 'python',
+    'java': 'java',
+    'cpp': 'cpp',
+    'cc': 'cpp',
+    'cxx': 'cpp',
+    'c': 'c',
+    'cs': 'csharp',
+    'go': 'go',
+    'rs': 'rust',
+    'rb': 'ruby',
+    'php': 'php',
+    'swift': 'swift',
+    'kt': 'kotlin',
+  };
+  return languageMap[ext] || 'plaintext';
+};
+
 export default function EditorPage() {
   const [language, setLanguage] = useState<"javascript" | "python" | "java" | "cpp">("javascript");
   const [code, setCode] = useState("");
@@ -54,6 +79,27 @@ export default function EditorPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const hasClonedRef = useRef(false);
+  
+  // Multi-agent debug state
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResults, setAnalysisResults] = useState<{
+    errors?: Array<{ line: number; message: string; severity: string; type: string }>;
+    fixes?: Array<{ line: number; original: string; fixed: string; reason: string }>;
+    fixedCode?: string;
+    summary?: string;
+    modifications?: Array<{ type: string; description: string; lineStart: number; lineEnd: number }>;
+    scanResults?: {
+      errors: Array<{ line: number; message: string; severity: string; type: string }>;
+      suggestions: string[];
+    };
+    fixResults?: {
+      changes: Array<{ line: number; original: string; fixed: string; reason: string }>;
+    };
+    editorResults?: {
+      modifications: Array<{ type: string; description: string; lineStart: number; lineEnd: number }>;
+      summary: string;
+    };
+  } | null>(null);
   
   // E2B Sandbox integration
   const {
@@ -108,6 +154,24 @@ export default function EditorPage() {
         const result = await initializeSandbox();
         console.log('E2B Sandbox initialized:', result);
         toast.success(`E2B Sandbox initialized: ${result.sessionId}`);
+        
+        // Load existing files from sandbox after initialization
+        setTimeout(async () => {
+          try {
+            const existingFiles = await listFiles(repoPath);
+            if (existingFiles.length > 0) {
+              console.log(`Found ${existingFiles.length} existing files in sandbox`);
+              const filesWithContent = existingFiles.map(filepath => ({
+                path: filepath,
+                content: ''
+              }));
+              setFiles(filesWithContent);
+              toast.success(`Loaded ${existingFiles.length} files from sandbox`);
+            }
+          } catch (err) {
+            console.log('No existing files in sandbox or error loading:', err);
+          }
+        }, 1500);
       } catch (error) {
         console.error('Failed to initialize sandbox:', error);
         toast.error('Failed to initialize sandbox: ' + (error instanceof Error ? error.message : 'Unknown error'));
@@ -128,6 +192,19 @@ export default function EditorPage() {
     const autoClone = async () => {
       const repoUrl = searchParams.get('repo');
       if (repoUrl && session && !sandboxLoading && !hasClonedRef.current) {
+        // Check if files already exist in sandbox before cloning
+        try {
+          const existingFiles = await listFiles(repoPath);
+          if (existingFiles.length > 0) {
+            console.log(`Files already exist in sandbox (${existingFiles.length} files). Skipping clone.`);
+            hasClonedRef.current = true;
+            toast.success(`Loaded ${existingFiles.length} existing files from sandbox`);
+            return;
+          }
+        } catch (err) {
+          console.log('No existing files found, proceeding with clone');
+        }
+        
         hasClonedRef.current = true;
         console.log('Auto-cloning repository from URL param:', repoUrl);
         // Decode the URL in case it's encoded
@@ -141,8 +218,22 @@ export default function EditorPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, sandboxLoading]);
 
-  const handleEditorChange = (value: string | undefined) => {
-    setCode(value || "");
+  const handleEditorChange = async (value: string | undefined) => {
+    const newCode = value || "";
+    setCode(newCode);
+    
+    // Auto-save to sandbox if a file is selected
+    if (selectedFile && session) {
+      try {
+        await writeFile(selectedFile, newCode);
+        // Update files array
+        setFiles(prev => prev.map(f => 
+          f.path === selectedFile ? { ...f, content: newCode } : f
+        ));
+      } catch (error) {
+        console.error('Auto-save failed:', error);
+      }
+    }
   };
 
   const handleLanguageChange = (newLang: "javascript" | "python" | "java" | "cpp") => {
@@ -1249,9 +1340,110 @@ export default function EditorPage() {
                   <div className="space-y-3">
                     <div className="p-3 border rounded-lg bg-background">
                       <h3 className="text-sm font-semibold mb-2">Multi-Agent System</h3>
-                      <p className="text-xs text-muted-foreground">
-                        AI agents will appear here to help with debugging and code analysis.
+                      <p className="text-xs text-muted-foreground mb-3">
+                        AI agents will analyze and fix your code automatically.
                       </p>
+                      <Button
+                        onClick={async () => {
+                          if (!session || !selectedFile) {
+                            toast.error("No sandbox session or file selected");
+                            return;
+                          }
+                          
+                          if (!code.trim()) {
+                            toast.error("No code to analyze");
+                            return;
+                          }
+                          
+                          setIsAnalyzing(true);
+                          setAnalysisResults(null);
+                          toast.success("🤖 Multi-agent system analyzing...");
+                          
+                          try {
+                            // Trigger multi-agent orchestrator
+                            const triggerResponse = await fetch('/api/trigger-analysis', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                sessionId: session.sandboxId,
+                                code,
+                                language: getLanguageFromFile(selectedFile),
+                                filepath: selectedFile
+                              })
+                            });
+                            
+                            if (triggerResponse.ok) {
+                              const triggerResult = await triggerResponse.json();
+                              console.log('🚀 Multi-agent orchestrator triggered:', triggerResult.eventId);
+                            }
+                            
+                            // Get immediate results from Gemini
+                            const geminiResponse = await fetch('/api/analyze-code', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ 
+                                code, 
+                                language: getLanguageFromFile(selectedFile),
+                                filepath: selectedFile
+                              })
+                            });
+                            
+                            if (!geminiResponse.ok) {
+                              const errorData = await geminiResponse.json();
+                              throw new Error(errorData.error || 'Failed to analyze code');
+                            }
+                            
+                            const result = await geminiResponse.json();
+                            console.log('✅ Analysis complete:', result);
+                            
+                            // Check if result has orchestrator format (finalCode) or regular format (fixedCode)
+                            const fixedCode = result.finalCode || result.fixedCode;
+                            
+                            if (fixedCode && fixedCode !== code) {
+                              // Apply the fixed code
+                              setCode(fixedCode);
+                              await writeFile(selectedFile, fixedCode);
+                              
+                              // Update files array
+                              setFiles(prev => prev.map(f => 
+                                f.path === selectedFile ? { ...f, content: fixedCode } : f
+                              ));
+                              
+                              // Show results
+                              const errorCount = result.scanResults?.errors?.length || result.errors?.length || 0;
+                              const fixCount = result.fixResults?.changes?.length || result.fixes?.length || 0;
+                              const modCount = result.editorResults?.modifications?.length || 0;
+                              
+                              const fileName = selectedFile.split('/').pop();
+                              toast.success(`✨ Fixed ${errorCount} errors, applied ${fixCount} fixes, made ${modCount} improvements in ${fileName}`);
+                              
+                              // Set analysis results with full orchestrator data
+                              setAnalysisResults({
+                                errors: result.scanResults?.errors || result.errors || [],
+                                fixes: result.fixResults?.changes || result.fixes || [],
+                                fixedCode: fixedCode,
+                                summary: result.editorResults?.summary || result.summary || `Applied ${fixCount} fixes`,
+                                modifications: result.editorResults?.modifications || [],
+                                scanResults: result.scanResults,
+                                fixResults: result.fixResults,
+                                editorResults: result.editorResults,
+                              });
+                            } else {
+                              toast.success('✓ No issues found!');
+                            }
+                          } catch (error) {
+                            console.error('Multi-agent debug error:', error);
+                            toast.error(error instanceof Error ? error.message : 'Failed to debug code');
+                          } finally {
+                            setIsAnalyzing(false);
+                          }
+                        }}
+                        disabled={isAnalyzing || !session || !selectedFile}
+                        className="w-full"
+                        size="sm"
+                      >
+                        {isAnalyzing ? 'Analyzing...' : 'Start Multi-Agent Debug'}
+                      </Button>
                     </div>
                     
                     <div className="space-y-2">
@@ -1278,6 +1470,64 @@ export default function EditorPage() {
                         </div>
                       </div>
                     </div>
+
+                    {analysisResults && (
+                      <div className="p-3 border rounded-lg bg-background space-y-2">
+                        <h4 className="text-xs font-semibold mb-2">🔍 Multi-Agent Analysis:</h4>
+                        <div className="text-xs space-y-2">
+                          {/* Scan Results */}
+                          {analysisResults.scanResults && (
+                            <div className="p-2 border rounded bg-muted/30">
+                              <div className="font-medium mb-1">Scanner Agent:</div>
+                              <div className="text-red-500">
+                                ❌ {analysisResults.scanResults.errors?.length || 0} errors found
+                              </div>
+                              {analysisResults.scanResults.suggestions?.length > 0 && (
+                                <div className="text-blue-500 text-[10px] mt-1">
+                                  💡 {analysisResults.scanResults.suggestions.length} suggestions
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Fix Results */}
+                          {analysisResults.fixResults && (
+                            <div className="p-2 border rounded bg-muted/30">
+                              <div className="font-medium mb-1">Fixer Agent:</div>
+                              <div className="text-green-500">
+                                ✅ {analysisResults.fixResults.changes?.length || 0} fixes applied
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Editor Results */}
+                          {analysisResults.editorResults && (
+                            <div className="p-2 border rounded bg-muted/30">
+                              <div className="font-medium mb-1">Editor Agent:</div>
+                              <div className="text-purple-500">
+                                ✨ {analysisResults.editorResults.modifications?.length || 0} improvements
+                              </div>
+                              {analysisResults.editorResults.summary && (
+                                <div className="text-muted-foreground text-[10px] mt-1">
+                                  {analysisResults.editorResults.summary}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Fallback for simple results */}
+                          {!analysisResults.scanResults && analysisResults.errors && (
+                            <div className="text-red-500">Errors: {analysisResults.errors.length}</div>
+                          )}
+                          {!analysisResults.fixResults && analysisResults.fixes && (
+                            <div className="text-green-500">Fixes: {analysisResults.fixes.length}</div>
+                          )}
+                          {!analysisResults.editorResults && analysisResults.summary && (
+                            <div className="text-muted-foreground">{analysisResults.summary}</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </ScrollArea>
 
