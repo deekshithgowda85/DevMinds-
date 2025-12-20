@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import { AuthCard } from "@/components/auth/auth-card";
 import Link from "next/link";
@@ -10,15 +10,15 @@ import { Button } from "@/components/ui/button";
 
 export default function SignupPage() {
   const router = useRouter();
-  const { data: session, status } = useSession();
+  const { user, loading } = useAuth();
 
   useEffect(() => {
-    if (session) {
+    if (user) {
       router.push("/editor");
     }
-  }, [session, router]);
+  }, [user, router]);
 
-  if (status === "loading") {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
         <div className="animate-pulse text-white">Loading...</div>

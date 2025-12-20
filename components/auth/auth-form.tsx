@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Mail, Lock, User } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 interface AuthFormProps {
   mode: "login" | "signup";
@@ -22,6 +22,7 @@ export function AuthForm({ mode }: AuthFormProps) {
     email: "",
     password: "",
   });
+  const supabase = createClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,35 +30,31 @@ export function AuthForm({ mode }: AuthFormProps) {
 
     try {
       if (mode === "signup") {
-        // Call signup API
-        const response = await fetch("/api/auth/signup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formData),
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.message || "Something went wrong");
-        }
-
-        toast.success("Account created successfully! Please login.");
-        router.push("/auth/login");
-      } else {
-        // Login with credentials
-        const result = await signIn("credentials", {
+        const { data, error } = await supabase.auth.signUp({
           email: formData.email,
           password: formData.password,
-          redirect: false,
+          options: {
+            data: {
+              name: formData.name,
+            },
+          },
         });
 
-        if (result?.error) {
-          toast.error("Invalid email or password");
-        } else {
-          toast.success("Welcome back!");
-          router.push("/editor");
-        }
+        if (error) throw error;
+
+        toast.success("Account created successfully! Please check your email to verify.");
+        router.push("/auth/login");
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password,
+        });
+
+        if (error) throw error;
+
+        toast.success("Welcome back!");
+        router.push("/editor");
+        router.refresh();
       }
     } catch (error: any) {
       toast.error(error.message || "Something went wrong");
@@ -69,8 +66,15 @@ export function AuthForm({ mode }: AuthFormProps) {
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     try {
-      await signIn("google", { callbackUrl: "/editor" });
-    } catch (error) {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+
+      if (error) throw error;
+    } catch (error: any) {
       toast.error("Failed to sign in with Google");
       setIsLoading(false);
     }
