@@ -6,11 +6,16 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useTheme } from "next-themes";
-import { useSession, signOut } from "next-auth/react";
+import { useAuth } from "@/hooks/use-auth";
+import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 const Navbar = () => {
   const { theme, setTheme } = useTheme();
-  const { data: session, status } = useSession();
+  const { user, loading } = useAuth();
+  const router = useRouter();
+  const supabase = createClient();
 
   const handleScroll = (id: string) => {
     const element = document.getElementById(id);
@@ -19,8 +24,11 @@ const Navbar = () => {
     }
   };
 
-  const handleSignOut = () => {
-    signOut({ callbackUrl: "/" });
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    toast.success("Signed out successfully");
+    router.push("/");
+    router.refresh();
   };
 
   return (
@@ -63,12 +71,12 @@ const Navbar = () => {
           </Button>
           <Separator orientation="vertical" className="h-6 md:h-8" />
           
-          {status === "loading" ? (
+          {loading ? (
             <div className="h-8 w-8 md:h-9 md:w-9 animate-pulse bg-muted rounded-full" />
-          ) : session ? (
+          ) : user ? (
             <div className="flex items-center space-x-2">
               <span className="hidden md:inline text-sm text-muted-foreground">
-                {session.user?.name || session.user?.email}
+                {user.user_metadata?.name || user.email}
               </span>
               <Button
                 variant="ghost"
@@ -126,10 +134,10 @@ const Navbar = () => {
                   Editor
                 </Link>
                 
-                {session ? (
+                {user ? (
                   <div className="flex flex-col space-y-2 pt-4 border-t">
                     <span className="text-sm text-muted-foreground">
-                      Signed in as {session.user?.name || session.user?.email}
+                      Signed in as {user.user_metadata?.name || user.email}
                     </span>
                     <Button
                       variant="outline"
