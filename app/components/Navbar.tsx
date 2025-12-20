@@ -1,8 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { Menu, Moon, Sun } from "lucide-react";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { useTheme } from "next-themes";
 
 const Navbar = () => {
+  const { theme, setTheme } = useTheme();
+
   const handleScroll = (id: string) => {
     const element = document.getElementById(id);
     if (element) {
@@ -11,48 +18,90 @@ const Navbar = () => {
   };
 
   return (
-    <nav className="fixed w-full bg-gray-900/90 backdrop-blur-xl z-50 shadow-2xl border-b border-purple-500/20">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
-          {/* Logo */}
-          <Link href="/" className="flex items-center space-x-3 group">
-            <div className="relative">
-              <div className="h-9 w-9 bg-gradient-to-r from-orange-400 to-yellow-400 rounded-full flex items-center justify-center group-hover:scale-110 transition-all duration-300">
-                <span className="text-white font-bold text-lg">M</span>
-              </div>
-              <div className="absolute inset-0 bg-orange-500/20 rounded-full blur-lg group-hover:bg-orange-400/30 transition-all duration-300"></div>
-            </div>
-            <span className="text-2xl font-bold bg-gradient-to-r from-orange-400 via-yellow-400 to-red-400 bg-clip-text text-transparent group-hover:from-orange-300 group-hover:via-yellow-300 group-hover:to-red-300 transition-all duration-300">
-              MultiAgent
-            </span>
+    <nav className="flex items-center justify-between rounded-xl bg-background/80 backdrop-blur-xl py-4 px-4 md:px-6 lg:px-8 shadow-lg border z-50">
+        <div className="flex items-center space-x-4 md:space-x-8">
+          <Link href="/" className="text-base md:text-lg font-bold">
+            MultiAgent Debugger
           </Link>
-
-          {/* Desktop Menu */}
-          <div className="hidden md:flex items-center space-x-8">
+          <div className="hidden md:flex items-center space-x-4 lg:space-x-8">
             <button
               onClick={() => handleScroll('features')}
-              className="font-medium transition-all duration-300 relative group text-gray-300 hover:text-orange-400"
+              className="text-sm font-medium text-muted-foreground/60 hover:text-foreground/80 transition-colors"
             >
               Features
-              <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-orange-400 to-yellow-400 transition-all duration-300 group-hover:w-full"></span>
             </button>
             <button
               onClick={() => handleScroll('about')}
-              className="font-medium transition-all duration-300 relative group text-gray-300 hover:text-orange-400"
+              className="text-sm text-muted-foreground/60 hover:text-foreground/80 transition-colors"
             >
               About
-              <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-orange-400 to-yellow-400 transition-all duration-300 group-hover:w-full"></span>
             </button>
             <Link
               href="/editor"
-              className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-yellow-500 text-white rounded-xl hover:from-orange-600 hover:to-yellow-600 transition-all duration-300 font-medium shadow-lg hover:shadow-orange-500/25 transform hover:scale-105"
+              className="text-sm text-muted-foreground/60 hover:text-foreground/80 transition-colors"
             >
-              Try Debugger
+              Editor
             </Link>
           </div>
         </div>
-      </div>
-    </nav>
+        <div className="flex items-center space-x-2 md:space-x-3">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-8 w-8 md:h-9 md:w-9"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          >
+            <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+            <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+            <span className="sr-only">Toggle theme</span>
+          </Button>
+          <Separator orientation="vertical" className="h-6 md:h-8" />
+          <Link href="/editor">
+            <Button className="hidden md:inline-flex h-8 md:h-9 rounded-full bg-foreground px-3 md:px-4 text-xs md:text-sm font-medium text-background hover:bg-foreground/90">
+              Try Debugger
+            </Button>
+          </Link>
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 md:hidden"
+              >
+                <Menu className="h-[15px] w-[15px]" />
+                <span className="sr-only">Open menu</span>
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-[240px] sm:w-[300px]">
+              <nav className="flex flex-col space-y-4">
+                <button
+                  onClick={() => handleScroll('features')}
+                  className="text-sm text-muted-foreground/60 hover:text-foreground/80 transition-colors text-left"
+                >
+                  Features
+                </button>
+                <button
+                  onClick={() => handleScroll('about')}
+                  className="text-sm text-muted-foreground/60 hover:text-foreground/80 transition-colors text-left"
+                >
+                  About
+                </button>
+                <Link
+                  href="/editor"
+                  className="text-sm text-muted-foreground/60 hover:text-foreground/80 transition-colors"
+                >
+                  Editor
+                </Link>
+                <Link href="/editor">
+                  <Button className="h-7 w-full rounded-full bg-foreground px-3 text-sm font-normal text-background hover:bg-foreground/90">
+                    Try Debugger
+                  </Button>
+                </Link>
+              </nav>
+            </SheetContent>
+          </Sheet>
+        </div>
+      </nav>
   );
 };
 

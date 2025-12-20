@@ -2,17 +2,19 @@
 
 import Navbar from "./components/Navbar";
 import BackgroundBlobs from "./components/BackgroundBlobs";
-import Hero from "./components/Hero";
+import { AcmeHero } from "@/components/acme-hero";
 import Features from "./components/Features";
 import About from "./components/About";
 import Footer from "./components/Footer";
 
 export default function Home() {
   return (
-    <div className="relative min-h-screen bg-linear-to-br from-gray-900 via-orange-900 to-gray-800">
-      <Navbar />
+    <div className="relative min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       <BackgroundBlobs />
-      <Hero />
+      <div className="container max-w-7xl mx-auto pt-4 px-4">
+        <Navbar />
+      </div>
+      <AcmeHero />
       <Features />
       <About />
       <Footer />
