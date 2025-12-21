@@ -115,7 +115,7 @@ export class E2BSandboxManager {
 
     try {
       let command: string;
-      let filepath = params.filepath || '';
+      let filepath = filename || '';
 
       switch (language.toLowerCase()) {
         case 'javascript':
