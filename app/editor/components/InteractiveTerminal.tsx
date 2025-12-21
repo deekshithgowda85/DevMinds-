@@ -13,13 +13,17 @@ interface CommandHistory {
   timestamp: number;
 }
 
-export const InteractiveTerminal = forwardRef<any, TerminalProps>(({ sessionId, onOutput }, ref) => {
+export interface TerminalRef {
+  addOutput: (lines: string[]) => void;
+  clearOutput: () => void;
+}
+
+export const InteractiveTerminal = forwardRef<TerminalRef, TerminalProps>(({ sessionId, onOutput }, ref) => {
   const [output, setOutput] = useState<string[]>(['Welcome to E2B Interactive Terminal', '$ ']);
   const [currentCommand, setCurrentCommand] = useState('');
   const [commandHistory, setCommandHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [terminalId, setTerminalId] = useState<string | null>(null);
-  const [isRunning, setIsRunning] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -91,6 +95,7 @@ export const InteractiveTerminal = forwardRef<any, TerminalProps>(({ sessionId, 
         eventSourceRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   const startTerminalSession = async () => {
@@ -176,8 +181,6 @@ export const InteractiveTerminal = forwardRef<any, TerminalProps>(({ sessionId, 
       setOutput(prev => [...prev.slice(0, -1), `$ ${command}`, '❌ No sandbox session', '$ ']);
       return;
     }
-
-    setIsRunning(true);
     
     // Add command to output
     setOutput(prev => [...prev.slice(0, -1), `$ ${command}`, '']);
@@ -205,12 +208,10 @@ export const InteractiveTerminal = forwardRef<any, TerminalProps>(({ sessionId, 
       }
 
       // Output is now handled by the stream
-      setIsRunning(false);
 
     } catch (error) {
       console.error('[Terminal] Failed to send command:', error);
       setOutput(prev => [...prev, '❌ Command failed', '$ ']);
-      setIsRunning(false);
     }
   };
 

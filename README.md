@@ -1,141 +1,531 @@
-# Multi-Agent Code Debugger
+# 🐛 Multi-Agent Code Debugger
 
-An intelligent code debugging platform powered by AI that uses multiple agents to scan, fix, and validate code automatically.
+![Next.js](https://img.shields.io/badge/Next.js-16.1.0-black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
+![E2B](https://img.shields.io/badge/E2B-Sandbox-green)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
-## Features
+An intelligent, AI-powered code debugging platform that combines multi-agent systems with cloud-based code execution. Debug, analyze, and fix code across multiple programming languages with the help of AI agents working collaboratively.
 
-- 🤖 **AI-Powered Analysis**: Uses Google Gemini AI for intelligent code analysis
-- 🔍 **Multi-Agent System**: Scanner, Fixer, and Validator agents work together
-- 💻 **Code Editor**: Built-in Monaco editor with syntax highlighting
-- 🐛 **Automatic Bug Detection**: Finds syntax errors, style issues, and potential bugs
-- ✨ **Smart Fixes**: AI-generated code corrections with explanations
-- 📊 **Real-time Feedback**: See changes as they're analyzed and fixed
-- 🌐 **Multi-Language Support**: JavaScript, TypeScript, Python, Java, C++, and more
+## 📸 Screenshots
 
-## Quick Start
+<div align="center">
 
-### 1. Install Dependencies
+### Landing Page
 
-```bash
-npm install
+![Landing Page](public/github/image1.png)
+
+### Code Editor Interface
+
+![Code Editor](public/github/image2.png)
+
+### Multi-Agent Debug Workflow
+
+![Debug Workflow](public/github/image3.png)
+
+### Project Graph Analyzer
+
+![Project Analyzer](public/github/image4.png)
+
+### AI-Powered Code Fixes
+
+![AI Fixes](public/github/image5.png)
+
+</div>
+
+## ✨ Features
+
+### 🤖 Multi-Agent Debugging System
+
+- **Scanner Agent**: Analyzes code for syntax errors, security vulnerabilities, and best practice violations
+- **Validator Agent**: Validates code logic, type checking, and runtime errors
+- **Fixer Agent**: AI-powered automatic code fix suggestions using Gemini 2.5 Flash
+- **Orchestrator Agent**: Coordinates agent workflow using Inngest for reliable execution
+
+### 💻 Code Editor
+
+- **Monaco Editor Integration**: Full-featured code editor with syntax highlighting
+- **Multi-Language Support**: JavaScript, Python, Java, C++, and more
+- **Real-time Execution**: Run code instantly in isolated E2B sandboxes
+- **File Management**: Create, edit, and manage project files
+- **Git Integration**: Clone repositories, commit, push, and pull changes
+
+### 🔍 Project Analysis Tools
+
+- **GitHub Repository Analyzer**: Visualize project structure with interactive graphs
+- **Dependency Mapping**: Automatic detection of imports and connections
+- **Architecture Visualization**: ReactFlow-powered project graph with:
+  - Pages, Components, API Routes detection
+  - Library and utility file categorization
+  - Model and schema file identification
+  - Hooks and configuration file mapping
+  - Real-time connection visualization
+
+### 🎯 Code Execution Environment
+
+- **Isolated Sandboxes**: E2B-powered cloud sandboxes for secure code execution
+- **Multiple Languages**: Support for JavaScript, Python, Java, C++, Rust, Go
+- **Real-time Output**: Live stdout/stderr streaming
+- **60-second Timeout**: Automatic process termination for long-running code
+- **Stdin Support**: Interactive input for programs
+
+### 🔐 Authentication & User Management
+
+- **Supabase Auth**: Secure authentication with email/password
+- **User Profiles**: Personal dashboard with project history
+- **Session Management**: Persistent login sessions
+- **Protected Routes**: Secure API endpoints
+
+### 📊 Debug Sessions
+
+- **Session Tracking**: Monitor all debugging sessions
+- **History**: View past analysis results
+- **Statistics**: Track debugging metrics
+- **Export Results**: Download analysis reports
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- **Node.js** >= 18.x
+- **npm** or **yarn** or **pnpm**
+- **Git** for version control
+- **E2B API Key** - [Get one here](https://e2b.dev)
+- **Gemini API Key** - [Get one here](https://ai.google.dev)
+- **Supabase Project** - [Create one here](https://supabase.com)
+- **Inngest Account** - [Sign up here](https://www.inngest.com)
+
+### Installation
+
+1. **Clone the repository**
+
+   ```bash
+   git clone https://github.com/yourusername/multi-agent-debugger.git
+   cd multi-agent-debugger
+   ```
+
+2. **Install dependencies**
+
+   ```bash
+   npm install
+   # or
+   yarn install
+   # or
+   pnpm install
+   ```
+
+3. **Set up environment variables**
+
+   Create a `.env.local` file in the root directory:
+
+   ```env
+   # E2B Sandbox Configuration
+   E2B_API_KEY=your_e2b_api_key_here
+
+   # Gemini AI Configuration
+   GEMINI_API_KEY=your_gemini_api_key_here
+
+   # Supabase Configuration
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+
+   # NextAuth Configuration
+   NEXTAUTH_SECRET=your_nextauth_secret_here
+   NEXTAUTH_URL=http://localhost:3000
+
+   # Inngest Configuration
+   INNGEST_EVENT_KEY=your_inngest_event_key
+   INNGEST_SIGNING_KEY=your_inngest_signing_key
+   ```
+
+4. **Set up Supabase Database**
+
+   Run the migration script in your Supabase SQL editor:
+
+   ```bash
+   # The migration file is located at:
+   supabase/migrations/001_initial_schema.sql
+   ```
+
+   This creates tables for:
+
+   - Users and profiles
+   - Projects
+   - Debug sessions
+   - Repositories
+
+5. **Set up E2B Sandbox Template**
+
+   Build your custom sandbox template:
+
+   ```bash
+   cd sandbox/codedebugger
+   npm run build:prod
+   ```
+
+   This creates an E2B template with:
+
+   - Node.js runtime
+   - Python 3.x
+   - Java JDK
+   - G++ compiler
+   - Git
+   - Common development tools
+
+6. **Run the development server**
+
+   ```bash
+   npm run dev
+   ```
+
+   Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+7. **Start Inngest Dev Server** (in a separate terminal)
+
+   ```bash
+   npx inngest-cli dev
+   ```
+
+## 📖 Usage Guide
+
+### 1. Code Editor
+
+#### Basic Execution
+
+1. Navigate to `/editor`
+2. Write or paste your code in the Monaco editor
+3. Select the programming language
+4. Click **"Run"** to execute in an isolated sandbox
+5. View output in the OUTPUT panel
+
+#### Debug with AI
+
+1. Write your code in the editor
+2. Click **"Start Debugger"** for syntax checking without AI
+3. Click **"AI Code Fix"** to run the full multi-agent analysis
+
+#### Clone GitHub Repository
+
+1. Click **"File"** → **"Clone Repository"**
+2. Enter GitHub repository URL
+3. Files will load in the sidebar
+4. Browse and edit files directly
+
+#### Git Operations
+
+**Clone Repository**
+
+- Click File → Clone Repository
+- Enter: `https://github.com/username/repository`
+
+**Commit Changes**
+
+- Make changes to files
+- Click Git → Commit
+- Enter commit message
+
+**Push to Remote**
+
+- Click Git → Push
+- Requires authentication
+
+**Pull from Remote**
+
+- Click Git → Pull
+- Syncs with latest changes
+
+### 2. Project Graph Analyzer
+
+1. Go to `/services`
+2. Paste a GitHub repository URL
+3. Click **"Analyze Repository"**
+4. View interactive project graph
+5. Click **"Export"** to download as JSON
+
+### 3. Multi-Agent Workflow
+
+```
+User submits code → Orchestrator → Scanner → Validator → Fixer → Results
 ```
 
-### 2. Set Up Gemini AI (Optional but Recommended)
+## 🏗️ Architecture & Flow Diagrams
 
-For AI-powered analysis, you need a Google Gemini API key:
+### System Architecture
 
-1. Get your API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
-2. Create a `.env.local` file in the root directory:
+The Multi-Agent Debugger follows a layered architecture with clear separation of concerns:
 
-```env
-GEMINI_API_KEY=your_api_key_here
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            CLIENT LAYER (Next.js Frontend)                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │
+│  │   Landing    │  │  Code Editor │  │   Services   │  │  My Projects │   │
+│  │     Page     │  │    /editor   │  │   /services  │  │ /my-projects │   │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘   │
+│         └──────────────────┴──────────────────┴──────────────────┘            │
+│                                      │                                        │
+│                      ┌───────────────┴───────────────┐                       │
+│                      │    Shared Components Layer     │                       │
+│                      │  - Monaco Editor               │                       │
+│                      │  - ReactFlow Graph             │                       │
+│                      │  - Auth Components             │                       │
+│                      │  - UI Components (shadcn)      │                       │
+│                      └───────────────┬───────────────┘                       │
+└──────────────────────────────────────┼─────────────────────────────────────┘
+                                       │
+┌──────────────────────────────────────┼─────────────────────────────────────┐
+│                          API LAYER (Next.js App Router)                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐             │
+│  │ /api/debug/*    │  │ /api/sandbox/*  │  │ /api/analyze-*  │             │
+│  │ - analyze       │  │ - execute       │  │ - code          │             │
+│  │ - trigger       │  │ - files         │  │ - project       │             │
+│  │ - poll          │  │ - git           │  │                 │             │
+│  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘             │
+└───────────┼─────────────────────┼─────────────────────┼─────────────────────┘
+            │                     │                     │
+┌───────────┼─────────────────────┼─────────────────────┼─────────────────────┐
+│                          SERVICE LAYER (lib/)                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐          │
+│  │ E2B Sandbox      │  │ Gemini Client    │  │ Git Client       │          │
+│  │ - executeCode()  │  │ - AI Analysis    │  │ - Clone/Push/Pull│          │
+│  └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘          │
+│           └──────────────────────┴──────────────────────┘                    │
+└──────────────────────────────────┼───────────────────────────────────────────┘
+                                   │
+┌──────────────────────────────────┼───────────────────────────────────────────┐
+│                      AGENT LAYER (Inngest Functions)                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │
+│  │   Scanner    │  │  Validator   │  │    Fixer     │  │ File Writer  │   │
+│  │    Agent     │  │    Agent     │  │    Agent     │  │    Agent     │   │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘   │
+│         └──────────────────┴──────────────────┴──────────────────┘            │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Note**: Without Gemini, the debugger will use pattern-based analysis (basic fixes like var→const, semicolons).
+### Multi-Agent Debug Workflow
 
-For detailed setup instructions, see [GEMINI_SETUP.md](GEMINI_SETUP.md)
-
-### 3. Run Development Server
-
-```bash
-npm run dev
+```
+USER SUBMITS CODE
+      │
+      ▼
+┌──────────────────────────────────────┐
+│  Frontend: Editor Component          │
+│  - User clicks "AI Code Fix"         │
+│  - Validates code not empty          │
+└─────────────────┬────────────────────┘
+                  │
+                  ▼ POST /api/debug/analyze
+┌──────────────────────────────────────┐
+│  Inngest: Orchestrator Agent         │
+│  - Coordinates agent execution       │
+└─────────────────┬────────────────────┘
+                  │
+    ┌─────────────┼─────────────┐
+    │             │             │
+    ▼             ▼             ▼
+┌────────┐   ┌────────┐   ┌────────┐
+│Scanner │→  │Validator→  │ Fixer  │
+│Agent   │   │Agent   │   │Agent   │
+└────────┘   └────────┘   └────────┘
+                  │
+                  ▼
+          ┌───────────────┐
+          │ Results to UI │
+          └───────────────┘
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser.
+### Code Execution Flow
 
-## Usage
+```
+USER CLICKS "RUN"
+      │
+      ▼
+┌──────────────────────────────────────┐
+│  POST /api/sandbox/execute           │
+│  - Validate input                     │
+└─────────────────┬────────────────────┘
+                  │
+                  ▼
+┌──────────────────────────────────────┐
+│  E2B Sandbox Manager                 │
+│  - Initialize sandbox                 │
+│  - executeCode(language, code)        │
+└─────────────────┬────────────────────┘
+                  │
+                  ▼
+┌──────────────────────────────────────┐
+│  E2B Container Execution             │
+│  - Isolated environment               │
+│  - 60 second timeout                  │
+│  - Capture stdout/stderr              │
+└─────────────────┬────────────────────┘
+                  │
+                  ▼
+          Return Output to UI
+```
 
-1. **Open the Editor**: Navigate to `/editor`
-2. **Write or Paste Code**: Use the built-in Monaco editor
-3. **Start Debug**: Click "Start Debug" to analyze your code
-4. **Review Results**: See errors, proposed fixes, and suggestions
-5. **Apply Fixes**: Click "Apply Fix" to update your code automatically
+### Repository Analysis Flow
 
-## How It Works
+```
+USER ENTERS GITHUB URL
+      │
+      ▼
+┌──────────────────────────────────────┐
+│  POST /api/analyze-project           │
+└─────────────────┬────────────────────┘
+                  │
+                  ▼
+┌──────────────────────────────────────┐
+│  E2B: Clone Repository               │
+│  git clone --depth 1 <url>           │
+└─────────────────┬────────────────────┘
+                  │
+                  ▼
+┌──────────────────────────────────────┐
+│  Categorize Files                    │
+│  - Pages, Components, APIs            │
+│  - Libraries, Models, Hooks           │
+│  - Config, Utils, Other               │
+└─────────────────┬────────────────────┘
+                  │
+                  ▼
+┌──────────────────────────────────────┐
+│  Parse Imports & Dependencies        │
+│  - Detect import statements           │
+│  - Match file paths                   │
+│  - Build connection graph             │
+└─────────────────┬────────────────────┘
+                  │
+                  ▼
+┌──────────────────────────────────────┐
+│  ReactFlow Visualization             │
+│  - Interactive graph                  │
+│  - Category-based colors              │
+│  - Export as JSON                     │
+└──────────────────────────────────────┘
+```
 
-The Multi-Agent Debugger uses a workflow system:
+> 📚 **For detailed architecture documentation**, see [ARCHITECTURE.md](ARCHITECTURE.md)  
+> 📊 **For complete flow diagrams**, see [FLOW.md](FLOW.md)
 
-1. **Scanner Agent** 🔍
+## 🏗️ Project Structure
 
-   - Analyzes code using Gemini AI or pattern matching
-   - Identifies errors, warnings, and potential issues
-   - Categorizes problems by severity
+```
+multi-agent-debugger/
+├── app/
+│   ├── api/                      # API Routes
+│   ├── editor/                   # Code editor page
+│   ├── services/                 # Project analyzer
+│   └── components/               # UI components
+├── lib/
+│   ├── e2b-sandbox.ts           # E2B integration
+│   ├── gemini-client.ts         # AI client
+│   ├── inngest/agents/          # AI agents
+│   └── supabase/                # Database
+├── sandbox/codedebugger/        # E2B template
+└── components/ui/               # UI components
+```
 
-2. **Fixer Agent** 🔧
+## 🛠️ Tech Stack
 
-   - Generates fixes based on identified issues
-   - Uses AI to understand context and intent
-   - Proposes line-by-line corrections
-
-3. **Validator Agent** ✅
-   - Reviews proposed fixes
-   - Ensures changes don't break functionality
-   - Provides confidence scores and suggestions
-
-## Technologies
-
-- **Next.js 14** - React framework
-- **TypeScript** - Type-safe JavaScript
-- **Monaco Editor** - VS Code-powered editor
-- **Google Gemini AI** - Advanced code analysis
+- **Next.js 16.1.0** - React framework
+- **TypeScript** - Type-safe development
+- **E2B** - Cloud code execution
+- **Gemini AI** - Code analysis
 - **Inngest** - Workflow orchestration
-- **E2B Sandbox** - Remote code execution
-- **Tailwind CSS** - Styling
+- **Supabase** - Database & Auth
+- **Monaco Editor** - Code editor
+- **ReactFlow** - Graph visualization
 
-## Environment Variables
+## 🔌 API Reference
 
-Create a `.env.local` file with:
+**Execute Code**
 
-```env
-# Required for AI-powered analysis
-GEMINI_API_KEY=your_gemini_api_key
-
-# Required for authentication
-NEXTAUTH_SECRET=your_nextauth_secret
-NEXTAUTH_URL=http://localhost:3000
-
-# Required for Supabase
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-
-# Required for E2B Sandbox
-E2B_API_KEY=your_e2b_api_key
+```typescript
+POST /api/debug/analyze
+{ "code": "...", "language": "javascript", "sessionId": "..." }
 ```
 
-## Documentation
+**Analyze Project**
 
-- [Gemini Setup Guide](GEMINI_SETUP.md) - Detailed Gemini AI configuration
-- [Authentication Guide](AUTHENTICATION.md) - User authentication setup
-
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```typescript
+POST /api/analyze-project
+{ "repoUrl": "https://github.com/user/repo" }
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Clone Repository**
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```typescript
+POST /api/sandbox/git
+{ "sessionId": "...", "action": "clone", "repoUrl": "..." }
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🚢 Deployment
 
-## Learn More
+**Deploy to Vercel**
 
-To learn more about Next.js, take a look at the following resources:
+1. Push to GitHub: `git push origin main`
+2. Import to [vercel.com](https://vercel.com)
+3. Add environment variables
+4. Deploy
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**Required Environment Variables:**
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `E2B_API_KEY`
+- `GEMINI_API_KEY`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXTAUTH_SECRET`
+- `INNGEST_EVENT_KEY`
+- `INNGEST_SIGNING_KEY`
 
-## Deploy on Vercel
+## 🤝 Contributing
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Fork the repository
+2. Create feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'Add amazing feature'`
+4. Push to branch: `git push origin feature/amazing-feature`
+5. Open a Pull Request
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📝 License
+
+MIT License - see [LICENSE](LICENSE) file for details
+
+## 🙏 Acknowledgments
+
+- **E2B** - Cloud sandbox infrastructure
+- **Google Gemini** - AI-powered analysis
+- **Inngest** - Workflow orchestration
+- **Supabase** - Database and authentication
+- **Vercel** - Deployment platform
+
+## 🗺️ Roadmap
+
+- [ ] More programming languages (Ruby, PHP, C#)
+- [ ] Real-time collaborative editing
+- [ ] Custom sandbox templates
+- [ ] VSCode extension
+- [ ] Team workspaces
+- [ ] Advanced git operations (branches, merges)
+- [ ] Code review AI agent
+- [ ] Docker container support
+- [ ] Private repository support
+
+## 📊 Supported Languages
+
+| Language   | Execution | AI Analysis | Syntax Check |
+| ---------- | --------- | ----------- | ------------ |
+| JavaScript | ✅        | ✅          | ✅           |
+| TypeScript | ✅        | ✅          | ✅           |
+| Python     | ✅        | ✅          | ✅           |
+| Java       | ✅        | ✅          | ✅           |
+| C++        | ✅        | ✅          | ✅           |
+
+**Built with ❤️ for developers**
+
+⭐ Star this repo if you find it useful!

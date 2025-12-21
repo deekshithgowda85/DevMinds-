@@ -364,6 +364,38 @@ export class E2BSandboxManager {
     return await this.runCommand(`cd ${path} && git pull ${remote} ${branch}`);
   }
 
+  async startTerminal(): Promise<{ terminalId: string }> {
+    if (!this.sandbox) {
+      throw new Error('Sandbox not initialized');
+    }
+    // E2B sandboxes have a built-in terminal, return the sandbox ID as terminal ID
+    return { terminalId: this.sandbox.sandboxId };
+  }
+
+  getTerminalSession(): { onData: ((data: string) => void) | null; onExit: (() => void) | null } | null {
+    if (!this.sandbox) {
+      return null;
+    }
+    // Return a terminal session object for streaming
+    return {
+      onData: null,
+      onExit: null
+    };
+  }
+
+  async sendToTerminal(data: string): Promise<void> {
+    if (!this.sandbox) {
+      throw new Error('Sandbox not initialized');
+    }
+    // Send command to terminal
+    await this.runCommand(data);
+  }
+
+  async resizeTerminal(cols: number, rows: number): Promise<void> {
+    // E2B terminal resize - not directly supported, this is a placeholder
+    console.log(`Terminal resize requested: ${cols}x${rows}`);
+  }
+
   async close(): Promise<void> {
     if (this.sandbox) {
       await this.sandbox.kill();

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import JSZip from "jszip";
 import Editor from "@monaco-editor/react";
 import { useTheme } from "next-themes";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -542,7 +542,7 @@ function EditorContent() {
               console.log('Sample file paths:', fileList.slice(0, 3));
               console.log('Storing repository base path:', tryPath);
               setFiles(filesWithContent);
-              setRepoBasePath(tryPath); // Store the base path for later file operations
+              // Repository base path is stored in tryPath variable
               console.log('Switching to files view');
               
               setOutput(prev => [
@@ -620,6 +620,9 @@ function EditorContent() {
     }
   };
 
+  // Terminal command handler (currently unused)
+  // Commented out to avoid unused variable warning
+  /*
   const handleTerminalCommand = async () => {
     if (!terminalCommand.trim() || !session) {
       return;
@@ -645,6 +648,7 @@ function EditorContent() {
       setOutput(prev => [...prev, `Error: ${errorMsg}`]);
     }
   };
+  */
 
   // Commit changes in sandbox
   const handleCommit = async (message: string) => {
@@ -854,7 +858,7 @@ function EditorContent() {
               variant="ghost" 
               size="sm" 
               className="h-8 w-8 p-0"
-              onClick={(e) => {
+              onClick={() => {
                 console.log('[Back Button] Clicked - Navigating to /my-projects');
               }}
               title="Back to Projects"
@@ -990,7 +994,7 @@ function EditorContent() {
                     const fileList = await listFiles(repoPath);
                     setFiles(fileList.map(p => ({ path: p, content: '' })));
                     toast.success(`Refreshed: ${fileList.length} files found`);
-                  } catch (error) {
+                  } catch (_error) {
                     toast.error('Failed to refresh files');
                   }
                 }}

@@ -10,7 +10,7 @@ interface FileNode {
     path?: string;
   };
   position: { x: number; y: number };
-  style?: Record<string, any>;
+  style?: Record<string, string | number>;
 }
 
 interface Edge {
