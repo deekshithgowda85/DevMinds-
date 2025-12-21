@@ -10,6 +10,8 @@ export interface ExecutionResult {
   stderr: string;
   exitCode: number;
   error?: string;
+  command?: string; // The command that was executed
+  actualPath?: string; // For git clone: the actual path where repo was cloned
 }
 
 export class E2BSandboxManager {
@@ -104,7 +106,8 @@ export class E2BSandboxManager {
   async executeCode(
     language: string,
     code: string,
-    filename?: string
+    filename?: string,
+    stdin?: string
   ): Promise<ExecutionResult> {
     if (!this.sandbox) {
       throw new Error('Sandbox not initialized');
@@ -117,31 +120,67 @@ export class E2BSandboxManager {
       switch (language.toLowerCase()) {
         case 'javascript':
         case 'js':
-          filepath = filename || '/workspace/js/temp.js';
+          if (!filepath) {
+            filepath = '/workspace/js/temp.js';
+          }
+          console.log(`[E2B] JavaScript filepath: ${filepath}`);
+          // Ensure directory exists and write file
+          const jsDir = filepath.substring(0, filepath.lastIndexOf('/'));
+          await this.sandbox.commands.run(`mkdir -p ${jsDir}`);
           await this.writeFile(filepath, code);
           command = `node ${filepath}`;
           break;
 
         case 'python':
         case 'py':
-          filepath = filename || '/workspace/python/temp.py';
+          if (!filepath) {
+            filepath = '/workspace/python/temp.py';
+          }
+          console.log(`[E2B] Python filepath: ${filepath}`);
+          // Ensure directory exists and write file
+          const pyDir = filepath.substring(0, filepath.lastIndexOf('/'));
+          await this.sandbox.commands.run(`mkdir -p ${pyDir}`);
           await this.writeFile(filepath, code);
           command = `python3 ${filepath}`;
           break;
 
         case 'java':
-          filepath = filename || '/workspace/java/Temp.java';
+          if (!filepath) {
+            filepath = '/workspace/java/Temp.java';
+          }
+          console.log(`[E2B] Java filepath: ${filepath}`);
+          // Ensure directory exists and write file
+          const javaDir = filepath.substring(0, filepath.lastIndexOf('/'));
+          await this.sandbox.commands.run(`mkdir -p ${javaDir}`);
           await this.writeFile(filepath, code);
           const className = filepath.split('/').pop()?.replace('.java', '') || 'Temp';
-          const dir = filepath.substring(0, filepath.lastIndexOf('/'));
-          command = `cd ${dir} && javac ${className}.java && java ${className}`;
+          command = `cd ${javaDir} && javac ${className}.java && java ${className}`;
           break;
 
         case 'cpp':
         case 'c++':
-          filepath = filename || '/workspace/cpp/temp.cpp';
+          // Use provided filepath or default to temp.cpp
+          if (!filepath) {
+            filepath = '/workspace/cpp/temp.cpp';
+          }
+          console.log(`[E2B] C++ filepath: ${filepath}`);
+          
+          // Ensure directory exists and write file
+          const cppDir = filepath.substring(0, filepath.lastIndexOf('/'));
+          await this.sandbox.commands.run(`mkdir -p ${cppDir}`);
+          console.log(`[E2B] Writing C++ file to: ${filepath}`);
           await this.writeFile(filepath, code);
-          command = `cd /workspace/cpp && g++ -o temp temp.cpp && ./temp`;
+          console.log(`[E2B] File written successfully`);
+          
+          // Verify file exists
+          const verifyResult = await this.sandbox.commands.run(`ls -la ${filepath}`);
+          console.log(`[E2B] File verification:`, verifyResult.stdout);
+          
+          const cppFileName = filepath.split('/').pop()?.replace('.cpp', '') || 'temp';
+          const sourceFile = filepath.split('/').pop() || 'temp.cpp';
+          console.log(`[E2B] Compiling: ${sourceFile} -> ${cppFileName}`);
+          command = `cd ${cppDir} && g++ -o ${cppFileName} ${sourceFile} && ./${cppFileName}`;
+          console.log(`[E2B] Command: ${command}`);
           break;
 
         default:
@@ -153,15 +192,35 @@ export class E2BSandboxManager {
           };
       }
 
-      const proc = await this.sandbox.commands.run(command);
+      console.log(`[E2B] Executing: ${command}`);
+      console.log(`[E2B] Stdin provided: ${stdin ? 'Yes (' + stdin.length + ' chars)' : 'No'}`);
+      
+      // If stdin is provided, pipe it to the command
+      let finalCommand = command;
+      if (stdin && stdin.trim()) {
+        // Escape single quotes in stdin and use echo with pipe
+        const escapedStdin = stdin.replace(/'/g, "'\\''");
+        finalCommand = `echo '${escapedStdin}' | ${command}`;
+        console.log(`[E2B] Using stdin, final command: ${finalCommand}`);
+      }
+      
+      const proc = await this.sandbox.commands.run(finalCommand, {
+        timeout: 60000, // 60 second timeout
+      });
+      console.log(`[E2B] Execution complete. Exit code: ${proc.exitCode}`);
+      console.log(`[E2B] stdout length: ${proc.stdout.length} chars`);
+      console.log(`[E2B] stderr length: ${proc.stderr.length} chars`);
+      if (proc.stdout) console.log(`[E2B] stdout: ${proc.stdout}`);
+      if (proc.stderr) console.log(`[E2B] stderr: ${proc.stderr}`);
 
       return {
         stdout: proc.stdout,
         stderr: proc.stderr,
         exitCode: proc.exitCode,
+        command: finalCommand, // Include the final command that was executed (with stdin if provided)
       };
     } catch (error) {
-      console.error('Code execution error:', error);
+      console.error('[E2B] Code execution error:', error);
       
       // Handle CommandExitError which contains stdout/stderr
       if (error && typeof error === 'object' && 'result' in error) {
@@ -189,7 +248,9 @@ export class E2BSandboxManager {
     }
 
     try {
-      const proc = await this.sandbox.commands.run(command);
+      const proc = await this.sandbox.commands.run(command, {
+        timeout: 60000, // 60 second timeout
+      });
 
       return {
         stdout: proc.stdout,
@@ -270,6 +331,7 @@ export class E2BSandboxManager {
         
         // Return the actual path in stdout for reference
         result.stdout = `${result.stdout}\nCloned to: ${actualTargetPath}\n${findResult.stdout}`;
+        result.actualPath = actualTargetPath; // Add the actual cloned path
       }
       
       return result;

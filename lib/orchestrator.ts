@@ -1,5 +1,6 @@
 import { createAgent, gemini, createTool, createNetwork, type Tool, createState } from "@inngest/agent-kit";
 import { z } from "zod";
+import { FileChange, analyzeCodeWithGemini } from "./gemini-client";
 
 interface OrchestratorState {
   filepath: string;
@@ -8,6 +9,7 @@ interface OrchestratorState {
   scannedCode: string;
   fixedCode: string;
   finalCode: string;
+  additionalFiles: FileChange[]; // New: Support for multi-file changes
   scanResults: {
     errors: Array<{ line: number; message: string; severity: string; type: string }>;
     suggestions: string[];
@@ -19,20 +21,45 @@ interface OrchestratorState {
     modifications: Array<{ type: string; description: string; lineStart: number; lineEnd: number }>;
     summary: string;
   };
-  currentPhase: "scanning" | "fixing" | "editing" | "complete";
+  executionResults: {
+    executed: boolean;
+    success: boolean;
+    stdout: string;
+    stderr: string;
+    exitCode: number;
+    executionTime: number;
+    errorMessage?: string;
+  };
+  currentPhase: "scanning" | "fixing" | "editing" | "validating" | "complete";
 }
 
 /**
  * Synchronous multi-agent orchestrator that runs scanner, fixer, and editor agents
  * Returns complete results immediately (not via Inngest events)
+ * OPTIMIZED: Calls Gemini once at the start, shares results across agents
  */
 export async function runMultiAgentAnalysis(
   code: string,
   language: string,
-  filepath: string = "untitled"
+  filepath: string = "untitled",
+  sessionId?: string
 ) {
   console.log(`[Orchestrator] Starting synchronous multi-agent analysis`);
   console.log(`[Orchestrator] Language: ${language}, File: ${filepath}`);
+  
+  // 🚀 OPTIMIZATION: Call Gemini once here, not in each agent
+  console.log(`[Orchestrator] 🤖 Calling Gemini AI once for comprehensive analysis...`);
+  const geminiAnalysis = await analyzeCodeWithGemini(code, language);
+  
+  if (!geminiAnalysis) {
+    console.error('[Orchestrator] ❌ Gemini analysis failed');
+    throw new Error('Failed to analyze code with Gemini AI. Please check your API key.');
+  }
+  
+  console.log(`[Orchestrator] ✅ Gemini analysis complete:`);
+  console.log(`  - Errors found: ${geminiAnalysis.errors.length}`);
+  console.log(`  - Fixes applied: ${geminiAnalysis.fixes.length}`);
+  console.log(`  - Additional files: ${geminiAnalysis.additionalFiles?.length || 0}`);
   
   const state = createState<OrchestratorState>({
     filepath,
@@ -41,27 +68,28 @@ export async function runMultiAgentAnalysis(
     scannedCode: code,
     fixedCode: code,
     finalCode: code,
+    additionalFiles: [], // Initialize empty array for additional files
     scanResults: { errors: [], suggestions: [] },
     fixResults: { changes: [] },
     editorResults: { modifications: [], summary: "" },
+    executionResults: {
+      executed: false,
+      success: false,
+      stdout: "",
+      stderr: "",
+      exitCode: -1,
+      executionTime: 0,
+    },
     currentPhase: "scanning",
   });
 
-  // Scanner Agent
+  // Scanner Agent - Reports pre-analyzed results (NO GEMINI CALL)
   const scannerAgent = createAgent<OrchestratorState>({
     name: "scanner",
-    description: "Scans code for errors and issues",
-    system: `You are a code scanner. Analyze code thoroughly and identify ALL errors, warnings, and issues.
+    description: "Reports scan results from Gemini analysis",
+    system: `You are a reporting agent. The code has ALREADY been analyzed by Gemini AI.
 
-CRITICAL: Be extremely thorough. Check:
-- Syntax errors (missing semicolons, brackets, etc.)
-- Undeclared identifiers
-- Wrong operators
-- Type mismatches
-- Missing includes/imports
-- Logic errors
-
-Return comprehensive error list with line numbers.`,
+Simply acknowledge and use the scanCode tool to proceed.`,
     model: gemini({
       model: "gemini-2.5-flash",
       apiKey: process.env.GEMINI_API_KEY!,
@@ -69,40 +97,37 @@ Return comprehensive error list with line numbers.`,
     tools: [
       createTool({
         name: "scanCode",
-        description: "Scan code for errors and return results",
+        description: "Report Gemini scan results",
         parameters: z.object({
-          errors: z.array(z.object({
-            line: z.number(),
-            message: z.string(),
-            severity: z.enum(["error", "warning", "info"]),
-            type: z.string(),
-          })),
-          suggestions: z.array(z.string()),
+          acknowledged: z.boolean().describe("Acknowledge scan results"),
         }),
-        handler: async ({ errors, suggestions }, { network }: Tool.Options<OrchestratorState>) => {
-          if (network) {
-            network.state.data.scanResults = { errors, suggestions };
+        handler: async ({ acknowledged }, { network }: Tool.Options<OrchestratorState>) => {
+          if (network && acknowledged) {
+            network.state.data.scanResults = {
+              errors: geminiAnalysis.errors.map(e => ({
+                line: e.line,
+                message: e.message,
+                severity: e.severity,
+                type: e.type
+              })),
+              suggestions: geminiAnalysis.suggestions || []
+            };
             network.state.data.currentPhase = "fixing";
-            console.log(`[Scanner] Found ${errors.length} errors, ${suggestions.length} suggestions`);
+            console.log(`[Scanner] Reported ${geminiAnalysis.errors.length} errors from Gemini`);
           }
-          return `Scan complete: ${errors.length} errors found`;
+          return `Reported ${geminiAnalysis.errors.length} errors`;
         },
       }),
     ],
   });
 
-  // Fixer Agent
+  // Fixer Agent - Reports pre-analyzed fixes (NO GEMINI CALL)
   const fixerAgent = createAgent<OrchestratorState>({
     name: "fixer",
-    description: "Applies automated fixes to code",
-    system: `You are a code fixer. Apply fixes based on scan results.
+    description: "Reports fixes from Gemini analysis",
+    system: `You are a reporting agent. The code has ALREADY been fixed by Gemini AI.
 
-For each error found:
-1. Identify the exact line and issue
-2. Generate the correct fixed version
-3. Document what was changed and why
-
-Generate complete fixed code with ALL errors corrected.`,
+Simply acknowledge and use the applyFixes tool to proceed.`,
     model: gemini({
       model: "gemini-2.5-flash",
       apiKey: process.env.GEMINI_API_KEY!,
@@ -110,63 +135,37 @@ Generate complete fixed code with ALL errors corrected.`,
     tools: [
       createTool({
         name: "applyFixes",
-        description: "Apply fixes to the code and return fixed version",
+        description: "Report Gemini fixes",
         parameters: z.object({
-          fixedCode: z.string().describe("The code with all fixes applied"),
-          changes: z.array(z.object({
-            line: z.number(),
-            original: z.string(),
-            fixed: z.string(),
-            reason: z.string(),
-          })),
+          acknowledged: z.boolean().describe("Acknowledge fixes"),
         }),
-        handler: async ({ fixedCode, changes }, { network }: Tool.Options<OrchestratorState>) => {
-          if (network) {
-            network.state.data.fixedCode = fixedCode;
-            network.state.data.fixResults = { changes };
+        handler: async ({ acknowledged }, { network }: Tool.Options<OrchestratorState>) => {
+          if (network && acknowledged) {
+            network.state.data.fixResults = {
+              changes: geminiAnalysis.fixes.map(f => ({
+                line: f.line,
+                original: f.original,
+                fixed: f.fixed,
+                reason: f.reason
+              }))
+            };
+            network.state.data.fixedCode = geminiAnalysis.fixedCode;
             network.state.data.currentPhase = "editing";
-            console.log(`[Fixer] Applied ${changes.length} fixes`);
+            console.log(`[Fixer] Reported ${geminiAnalysis.fixes.length} fixes from Gemini`);
           }
-          return `Applied ${changes.length} fixes`;
+          return `Reported ${geminiAnalysis.fixes.length} fixes`;
         },
       }),
     ],
   });
 
-  // Editor Agent
+  // Editor Agent - Reports final code (NO GEMINI CALL)
   const editorAgent = createAgent<OrchestratorState>({
     name: "editor",
-    description: "Makes comprehensive code improvements",
-    system: `You are a code editor. Make final improvements to ensure code is perfect, compilable, and follows best practices.
+    description: "Reports final code from Gemini analysis",
+    system: `You are a reporting agent. The code has ALREADY been finalized by Gemini AI.
 
-CRITICAL REQUIREMENTS by language:
-
-C++:
-- MUST have int main() function (add if missing)
-- MUST have #include <iostream> and other necessary headers
-- MUST use std::cout with << operator (NOT >>)
-- MUST end statements with semicolons
-- MUST return 0 from main()
-- Code MUST compile without errors
-
-JavaScript/TypeScript:
-- Use const/let instead of var
-- Use arrow functions
-- Proper semicolons
-- === instead of ==
-
-Python:
-- PEP 8 compliance
-- Type hints
-- 4-space indentation
-- Proper imports
-
-Java:
-- Must have public static void main(String[] args)
-- Proper class definition
-- Necessary imports
-
-Generate COMPLETE, COMPILABLE, RUNNABLE code!`,
+Simply acknowledge and use the improveCode tool to proceed.`,
     model: gemini({
       model: "gemini-2.5-flash",
       apiKey: process.env.GEMINI_API_KEY!,
@@ -174,26 +173,82 @@ Generate COMPLETE, COMPILABLE, RUNNABLE code!`,
     tools: [
       createTool({
         name: "improveCode",
-        description: "Make final improvements and ensure code quality",
+        description: "Report final code from Gemini",
         parameters: z.object({
-          finalCode: z.string().describe("Complete, working, compilable code"),
-          modifications: z.array(z.object({
-            type: z.enum(["fix", "refactor", "optimize"]),
-            description: z.string(),
-            lineStart: z.number(),
-            lineEnd: z.number(),
-          })),
-          summary: z.string().describe("Summary of all changes made"),
+          acknowledged: z.boolean().describe("Acknowledge final code"),
         }),
-        handler: async ({ finalCode, modifications, summary }, { network }: Tool.Options<OrchestratorState>) => {
-          if (network) {
-            network.state.data.finalCode = finalCode;
-            network.state.data.editorResults = { modifications, summary };
-            network.state.data.currentPhase = "complete";
-            console.log(`[Editor] Made ${modifications.length} improvements`);
-            console.log(`[Editor] Summary: ${summary}`);
+        handler: async ({ acknowledged }, { network }: Tool.Options<OrchestratorState>) => {
+          if (network && acknowledged) {
+            network.state.data.finalCode = geminiAnalysis.fixedCode;
+            network.state.data.additionalFiles = geminiAnalysis.additionalFiles || [];
+            network.state.data.editorResults = {
+              modifications: geminiAnalysis.fixes.map(f => ({
+                type: 'fix' as const,
+                description: f.reason,
+                lineStart: f.line,
+                lineEnd: f.line
+              })),
+              summary: `Applied ${geminiAnalysis.fixes.length} fixes. ${geminiAnalysis.additionalFiles?.length ? `Created ${geminiAnalysis.additionalFiles.length} additional files.` : ''}`
+            };
+            network.state.data.currentPhase = "validating";
+            console.log(`[Editor] Reported final code from Gemini (${geminiAnalysis.fixedCode.length} chars, ${geminiAnalysis.additionalFiles?.length || 0} additional files)`);
           }
-          return `Improvements complete: ${summary}`;
+          return `Final code ready: ${geminiAnalysis.fixedCode.length} chars, ${geminiAnalysis.additionalFiles?.length || 0} additional files`;
+        },
+      }),
+    ],
+  });
+
+  // Validator Agent - Analyzes execution results (NO GEMINI CALL - just logic)
+  const validatorAgent = createAgent<OrchestratorState>({
+    name: "validator",
+    description: "Analyzes code execution results and validates the code ran successfully",
+    system: ({ network }) => {
+      const results = network?.state.data.executionResults;
+      return `You are a code execution validator. You will receive execution results from the code that was run.
+
+EXECUTION RESULTS:
+- Executed: ${results?.executed}
+- Success: ${results?.success}
+- Exit Code: ${results?.exitCode}
+- Execution Time: ${results?.executionTime}ms
+- Standard Output:\n${results?.stdout || '(empty)'}
+- Standard Error:\n${results?.stderr || '(empty)'}
+${results?.errorMessage ? `- Error Message: ${results.errorMessage}` : ''}
+
+Analyze the results and determine:
+- Did the code compile successfully (for compiled languages)?
+- Did it execute without runtime errors?
+- What was the output?
+- Was the exit code 0 (success)?
+
+IMPORTANT: You do NOT execute code yourself. The code has already been executed. Just analyze the results provided above.`;
+    },
+    model: gemini({
+      model: "gemini-2.5-flash",
+      apiKey: process.env.GEMINI_API_KEY!,
+    }),
+    tools: [
+      createTool({
+        name: "reportExecution",
+        description: "Report the actual execution results from running the code in the sandbox",
+        parameters: z.object({
+          wasExecuted: z.boolean().describe("Whether code execution was attempted"),
+          compilationSuccess: z.boolean().describe("For compiled languages, did it compile?"),
+          runtimeSuccess: z.boolean().describe("Did code run without errors?"),
+          analysis: z.string().describe("Analysis of the execution results"),
+        }),
+        handler: async ({ wasExecuted, compilationSuccess, runtimeSuccess, analysis }, { network }: Tool.Options<OrchestratorState>) => {
+          if (network) {
+            const executionResults = network.state.data.executionResults;
+            network.state.data.currentPhase = "complete";
+            const success = wasExecuted && compilationSuccess && runtimeSuccess;
+            console.log(`[Validator] Execution ${success ? '✅ SUCCESS' : '❌ FAILED'}`);
+            console.log(`[Validator] Analysis: ${analysis}`);
+            if (executionResults.stdout) console.log(`[Validator] Output: ${executionResults.stdout.substring(0, 200)}`);
+            if (executionResults.stderr) console.log(`[Validator] Errors: ${executionResults.stderr.substring(0, 200)}`);
+          }
+          return `Validation complete: ${analysis}`;
         },
       }),
     ],
@@ -202,7 +257,7 @@ Generate COMPLETE, COMPILABLE, RUNNABLE code!`,
   // Create network with all agents
   const network = createNetwork<OrchestratorState>({
     name: "multi-agent-orchestrator-sync",
-    agents: [scannerAgent, fixerAgent, editorAgent],
+    agents: [scannerAgent, fixerAgent, editorAgent, validatorAgent],
     maxIter: 30,
     defaultState: state,
     router: async ({ network }) => {
@@ -220,6 +275,72 @@ Generate COMPLETE, COMPILABLE, RUNNABLE code!`,
       } else if (phase === "editing") {
         console.log('[Router] → Editor Agent');
         return editorAgent;
+      } else if (phase === "validating") {
+        console.log('[Router] → Executing code before validation...');
+        
+        // EXECUTE THE CODE BEFORE THE VALIDATOR RUNS
+        if (sessionId) {
+          try {
+            const startTime = Date.now();
+            const response = await fetch('http://localhost:3000/api/sandbox/execute', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                sessionId: sessionId,
+                language: language,
+                code: network.state.data.finalCode,
+                filename: filepath,
+              }),
+            });
+
+            if (response.ok) {
+              const execResult = await response.json();
+              const executionTime = Date.now() - startTime;
+              
+              network.state.data.executionResults = {
+                executed: true,
+                success: execResult.success && execResult.exitCode === 0,
+                stdout: execResult.stdout || '',
+                stderr: execResult.stderr || '',
+                exitCode: execResult.exitCode,
+                executionTime: executionTime,
+                errorMessage: execResult.error,
+              };
+              
+              console.log(`[Router] ✅ Code executed in ${executionTime}ms`);
+              console.log(`[Router] Exit code: ${execResult.exitCode}`);
+              if (execResult.stdout) console.log(`[Router] Output: ${execResult.stdout.substring(0, 200)}`);
+              if (execResult.stderr) console.log(`[Router] Stderr: ${execResult.stderr.substring(0, 200)}`);
+            } else {
+              throw new Error('Execution API failed');
+            }
+          } catch (error) {
+            console.error(`[Router] ❌ Execution failed:`, error);
+            network.state.data.executionResults = {
+              executed: true,
+              success: false,
+              stdout: '',
+              stderr: error instanceof Error ? error.message : 'Execution failed',
+              exitCode: 1,
+              executionTime: 0,
+              errorMessage: error instanceof Error ? error.message : 'Failed to execute code',
+            };
+          }
+        } else {
+          console.log(`[Router] ⚠️ No sessionId provided - skipping execution`);
+          network.state.data.executionResults = {
+            executed: false,
+            success: false,
+            stdout: '',
+            stderr: 'No sandbox session available',
+            exitCode: -1,
+            executionTime: 0,
+            errorMessage: 'Sandbox session required for code execution',
+          };
+        }
+        
+        console.log('[Router] → Validator Agent (analyzing results...)');
+        return validatorAgent;
       } else if (phase === "complete") {
         console.log('[Router] → Complete!');
         return;
@@ -232,16 +353,14 @@ Generate COMPLETE, COMPILABLE, RUNNABLE code!`,
   console.log(`[Orchestrator] Running multi-agent network...`);
   
   const result = await network.run(
-    `Analyze and fix this ${language} code from "${filepath}":
+    `The code has already been analyzed by Gemini AI.
 
-${code}
+Scanner: Acknowledge the ${geminiAnalysis.errors.length} errors found.
+Fixer: Acknowledge the ${geminiAnalysis.fixes.length} fixes applied.
+Editor: Acknowledge the final code is ready.
+Validator: Will analyze execution results after code runs.
 
-WORKFLOW:
-1. Scanner: Identify ALL errors
-2. Fixer: Fix all errors
-3. Editor: Ensure code is complete, compilable, and production-ready
-
-Be thorough!`,
+Just acknowledge and proceed through the workflow.`,
     { state }
   );
 
@@ -250,6 +369,8 @@ Be thorough!`,
   console.log(`[Orchestrator] Fixes applied: ${result.state.data.fixResults.changes.length}`);
   console.log(`[Orchestrator] Improvements: ${result.state.data.editorResults.modifications.length}`);
   console.log(`[Orchestrator] Final code length: ${result.state.data.finalCode.length}`);
+  console.log(`[Orchestrator] Additional files: ${result.state.data.additionalFiles.length}`);
+  console.log(`[Orchestrator] Execution: ${result.state.data.executionResults.executed ? (result.state.data.executionResults.success ? '✅ SUCCESS' : '❌ FAILED') : '⚠️ NOT EXECUTED'}`);
   console.log(`[Orchestrator] ========================`);
 
   return {
@@ -257,8 +378,10 @@ Be thorough!`,
     filepath: result.state.data.filepath,
     originalCode: result.state.data.originalCode,
     finalCode: result.state.data.finalCode,
+    additionalFiles: result.state.data.additionalFiles,
     scanResults: result.state.data.scanResults,
     fixResults: result.state.data.fixResults,
     editorResults: result.state.data.editorResults,
+    executionResults: result.state.data.executionResults,
   };
 }

@@ -50,6 +50,8 @@ export async function GET(request: NextRequest) {
     const sessionId = searchParams.get('sessionId');
     const path = searchParams.get('path');
 
+    console.log('[GET /api/sandbox/files] Reading file:', { sessionId, path });
+
     if (!sessionId || !path) {
       return NextResponse.json(
         { error: 'Missing required parameters: sessionId, path' },
@@ -59,13 +61,16 @@ export async function GET(request: NextRequest) {
 
     const sandbox = getSandboxInstance(sessionId);
     if (!sandbox) {
+      console.error('[GET /api/sandbox/files] Sandbox not found for sessionId:', sessionId);
       return NextResponse.json(
         { error: 'Sandbox session not found' },
         { status: 404 }
       );
     }
 
+    console.log('[GET /api/sandbox/files] Reading file from sandbox...');
     const content = await sandbox.readFile(path);
+    console.log('[GET /api/sandbox/files] File read successfully, length:', content.length);
 
     return NextResponse.json({
       success: true,
@@ -73,9 +78,17 @@ export async function GET(request: NextRequest) {
       content,
     });
   } catch (error) {
-    console.error('File read error:', error);
+    console.error('[GET /api/sandbox/files] File read error:', error);
+    console.error('[GET /api/sandbox/files] Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to read file' },
+      { 
+        error: error instanceof Error ? error.message : 'Failed to read file',
+        details: 'File may not exist in sandbox. Check if the file was properly created or cloned.'
+      },
       { status: 500 }
     );
   }

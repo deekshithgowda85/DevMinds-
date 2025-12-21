@@ -2,6 +2,13 @@
  * Gemini AI Client for code analysis and fixes
  */
 
+export interface FileChange {
+  filepath: string;
+  content: string;
+  reason: string;
+  isNew: boolean;
+}
+
 export interface GeminiCodeAnalysis {
   errors: Array<{
     line: number;
@@ -15,8 +22,9 @@ export interface GeminiCodeAnalysis {
     fixed: string;
     reason: string;
   }>;
-  fixedCode: string;
+  fixedCode: string; // Primary file - kept for backward compatibility
   suggestions: string[];
+  additionalFiles?: FileChange[]; // New: Additional files that need to be created/modified
 }
 
 export async function analyzeCodeWithGemini(
@@ -36,106 +44,77 @@ export async function analyzeCodeWithGemini(
     return null;
   }
 
-  try {
-    console.log('[Gemini] Preparing prompt for', language);
+  // Retry logic for rate limiting
+  const maxRetries = 3;
+  let lastError: Error | null = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      if (attempt > 1) {
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // Exponential backoff, max 5s
+        console.log(`[Gemini] Retry attempt ${attempt}/${maxRetries} after ${delay}ms delay...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+      
+      console.log(`[Gemini] Preparing prompt for ${language} (attempt ${attempt}/${maxRetries})`);
     
-    const prompt = `You are an expert code analyzer and fixer for ALL programming languages. Your task is to analyze code and provide a COMPLETE, WORKING, COMPILABLE/EXECUTABLE version.
+    const prompt = `You are a universal code analyzer & fixer. Input includes {language} and {code}. 
+Output MUST be valid JSON.
 
-ORIGINAL CODE (${language}):
-\`\`\`${language}
-${code}
-\`\`\`
+Your job: detect errors, fix them, and output fully working, executable code.and dont provide summary only ouptut code
 
-CRITICAL REQUIREMENTS FOR ALL LANGUAGES:
+Rules by language:
 
-${language === 'cpp' || language === 'c++' ? `
-C++ REQUIREMENTS:
-- MUST produce COMPLETE, COMPILABLE C++ code
-- MUST include: int main() { ... return 0; }
-- MUST include all necessary headers: #include <iostream>, #include <string>, etc.
-- Use std::cout, std::cin, std::endl (with std:: prefix) - NEVER use bare cout
-- Use << operator for output (NEVER use >> for output)
-- Add ALL missing semicolons at end of statements
-- Ensure ALL braces are balanced { }
-- Properly qualify all standard library functions (std::)
-- If the code has a function but no main(), CREATE a main() that calls it
-- The fixedCode MUST compile with g++/clang++ without ANY errors
-- DO NOT leave any syntax errors or undefined identifiers
-` : language === 'python' ? `
-PYTHON REQUIREMENTS:
-- MUST produce COMPLETE, EXECUTABLE Python code
-- Follow PEP 8 style guide strictly
-- Use proper indentation (4 spaces, NO tabs)
-- Add type hints for function parameters and return values
-- Handle exceptions properly with try/except
-- Use meaningful variable names following snake_case
-- Add proper imports (import statements at top)
-- Ensure proper string formatting (use f-strings)
-- Code MUST run with python3 without errors
-` : language === 'java' ? `
-JAVA REQUIREMENTS:
-- MUST produce COMPLETE, COMPILABLE Java code
-- MUST have: public static void main(String[] args)
-- Include proper class definition with matching filename
-- Add all necessary imports (java.util.*, java.io.*, etc.)
-- Use proper Java naming conventions (CamelCase for classes, camelCase for methods)
-- Add proper access modifiers (public, private, protected)
-- Ensure all variables are properly declared with types
-- Add proper exception handling
-- Code MUST compile with javac without errors
-` : language === 'javascript' || language === 'typescript' ? `
-JAVASCRIPT/TYPESCRIPT REQUIREMENTS:
-- Use modern ES6+ syntax
-- Use const/let instead of var (NEVER use var)
-- Add semicolons consistently at end of statements
-- Use === instead of == for comparisons
-- Use arrow functions where appropriate
-- Add proper error handling with try/catch
-- Use template literals for string interpolation
-- For TypeScript: Add proper type annotations
-- Ensure all functions return appropriate types
-` : `
-GENERAL REQUIREMENTS:
-- Produce complete, working code
-- Fix all syntax errors
-- Add missing imports/includes
-- Follow language best practices
-- Code MUST compile/run without errors
-`}
+C++:
+- Output FULL compilable code.
+- Include all headers.
+- Use std:: prefix always.
+- Must contain: int main(){... return 0;}
+- Fix all syntax, missing braces, includes.
+- If headers referenced, generate additionalFiles.
 
-QUALITY CHECKLIST (verify before generating fixedCode):
-✓ All necessary imports/includes present?
-✓ Main function/entry point present (if required)?
-✓ All semicolons/statement terminators present?
-✓ All operators correct?
-✓ All identifiers properly qualified?
-✓ All variables declared?
-✓ All braces/parentheses balanced?
-✓ Proper indentation?
-✓ Will this code compile/run without errors?
+Python:
+- Output FULL runnable script.
+- PEP8, 4-space indent, type hints, imports, exceptions, f-strings.
 
-RESPONSE FORMAT (JSON ONLY - NO OTHER TEXT):
+Java:
+- FULL compilable program.
+- Class + public static void main.
+- Add imports, fix types and naming.
+
+JS/TS:
+- ES6+, const/let, semicolons, ===, arrow functions, try/catch.
+
+General:
+- Fix all syntax/logic errors.
+- Add needed imports/includes.
+- Ensure code runs/compiles without errors.
+
+QUALITY CHECK:
+- Entry point exists?
+- Imports/includes present?
+- No undefined vars?
+- Balanced braces?
+- Indentation correct?
+
+OUTPUT FORMAT (JSON ONLY):
+
 {
-  "errors": [
-    { "line": 1, "message": "Description", "severity": "error", "type": "syntax" }
-  ],
-  "fixes": [
-    { "line": 1, "original": "old code", "fixed": "new code", "reason": "explanation" }
-  ],
-  "fixedCode": "THE COMPLETE FIXED CODE HERE - MUST BE COMPILABLE/EXECUTABLE",
-  "suggestions": ["improvement 1", "improvement 2"]
+ "errors":[{ "line":1, "message":"...", "severity":"error" }],
+ "fixes":[{ "line":1, "original":"...", "fixed":"...", "reason":"..." }],
+ "fixedCode":"<FULL WORKING CODE HERE>",
+ "suggestions":["...", "..."],
+ "additionalFiles":[
+   { "filepath":"x.h","content":"...","reason":"...","isNew":true }
+ ]
 }
 
-CRITICAL: 
-- fixedCode MUST be COMPLETE and WORKING for ${language}
-- Include ALL necessary boilerplate (main function, imports, etc)
-- The code MUST compile/run without ANY errors
-- Do NOT return incomplete code
-- Do NOT return the original code if it has errors - FIX IT COMPLETELY
-- Be thorough - check EVERY line for issues`;
+fixedCode MUST be fully working for {language}. 
+Never return partial code. Always return a complete, compilable version.
+`;
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: {
@@ -146,7 +125,7 @@ CRITICAL:
             {
               parts: [
                 {
-                  text: prompt,
+                  text: `Language: ${language}\n\nCode:\n${code}\n\n${prompt}`,
                 },
               ],
             },
@@ -155,7 +134,8 @@ CRITICAL:
             temperature: 0.2,
             topK: 40,
             topP: 0.95,
-            maxOutputTokens: 2048,
+            maxOutputTokens: 8192,
+            responseMimeType: "application/json",
           },
         }),
       }
@@ -166,54 +146,100 @@ CRITICAL:
     if (!response.ok) {
       const errorText = await response.text();
       console.error('[Gemini] API error:', { status: response.status, error: errorText });
-      throw new Error(`Gemini API error: ${response.statusText} - ${errorText}`);
+      
+      // Handle rate limiting
+      if (response.status === 429) {
+        throw new Error(`Gemini API rate limit exceeded. Please wait a moment and try again.`);
+      }
+      
+      // Handle quota/billing errors
+      if (response.status === 403) {
+        throw new Error(`Gemini API key invalid or quota exceeded. Please check your API key at https://makersuite.google.com/app/apikey`);
+      }
+      
+      throw new Error(`Gemini API error (${response.status}): ${response.statusText}`);
     }
 
     const data = await response.json();
+    console.log('[Gemini] Response structure:', JSON.stringify(data, null, 2).substring(0, 500));
+    
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!text) {
       console.error('[Gemini] Response missing text. Full response:', JSON.stringify(data, null, 2));
-      throw new Error('No response from Gemini');
+      
+      // Check for safety blocks
+      if (data.candidates?.[0]?.finishReason === 'SAFETY') {
+        throw new Error('Gemini blocked the response due to safety filters. Try rephrasing your code.');
+      }
+      
+      throw new Error('No response from Gemini API');
     }
 
     console.log('[Gemini] Raw response preview:', text.substring(0, 500) + (text.length > 500 ? '...' : ''));
 
-    // Extract JSON from markdown code blocks if present
-    let jsonText = text;
-    const jsonBlockMatch = text.match(/```json\s*\n([\s\S]*?)\n```/);
-    if (jsonBlockMatch) {
-      jsonText = jsonBlockMatch[1];
-    } else {
-      // Try to find JSON object
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        jsonText = jsonMatch[0];
+    // Since we set responseMimeType to application/json, response should be JSON
+    let analysis: GeminiCodeAnalysis;
+    try {
+      // Try parsing directly first (for JSON responses)
+      analysis = JSON.parse(text);
+    } catch {
+      // Fallback: Extract JSON from markdown code blocks if present
+      let jsonText = text;
+      const jsonBlockMatch = text.match(/```json\s*\n([\s\S]*?)\n```/);
+      if (jsonBlockMatch) {
+        jsonText = jsonBlockMatch[1];
+      } else {
+        // Try to find JSON object
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonText = jsonMatch[0];
+        }
       }
-    }
 
-    console.log('[Gemini] Extracted JSON preview:', jsonText.substring(0, 300) + (jsonText.length > 300 ? '...' : ''));
-    const analysis: GeminiCodeAnalysis = JSON.parse(jsonText);
+      console.log('[Gemini] Extracted JSON preview:', jsonText.substring(0, 300) + (jsonText.length > 300 ? '...' : ''));
+      analysis = JSON.parse(jsonText);
+    }
     
     // Validate the response
     if (!analysis.fixedCode || !Array.isArray(analysis.errors) || !Array.isArray(analysis.fixes)) {
       console.error('[Gemini] Invalid response structure:', analysis);
-      throw new Error('Invalid response format from Gemini');
+      throw new Error('Invalid response format from Gemini - missing required fields');
     }
     
-    console.log('[Gemini] Analysis successful:', {
+    console.log('[Gemini] ✅ Analysis successful:', {
       errorsCount: analysis.errors.length,
       fixesCount: analysis.fixes.length,
       hasFixedCode: !!analysis.fixedCode,
-      fixedCodeLength: analysis.fixedCode.length
+      fixedCodeLength: analysis.fixedCode.length,
+      additionalFiles: analysis.additionalFiles?.length || 0
     });
     
     return analysis;
-  } catch (error) {
-    console.error('[Gemini] API error:', error);
-    if (error instanceof Error) {
-      console.error('[Gemini] Error details:', error.message);
+    
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error(`[Gemini] Attempt ${attempt}/${maxRetries} failed:`, lastError.message);
+      
+      // Don't retry on certain errors
+      if (lastError.message.includes('invalid') || 
+          lastError.message.includes('quota exceeded') ||
+          lastError.message.includes('403')) {
+        console.error('[Gemini] Non-retryable error, aborting');
+        break;
+      }
+      
+      // Continue to next retry
+      if (attempt < maxRetries) {
+        continue;
+      }
     }
-    return null;
   }
+  
+  // All retries failed
+  console.error('[Gemini] All retry attempts failed:', lastError?.message);
+  if (lastError instanceof Error) {
+    console.error('[Gemini] Error details:', lastError.message);
+  }
+  return null;
 }

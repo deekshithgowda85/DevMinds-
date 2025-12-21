@@ -5,6 +5,7 @@ import JSZip from "jszip";
 import Editor from "@monaco-editor/react";
 import { useTheme } from "next-themes";
 import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   PlayIcon,
@@ -74,6 +75,8 @@ function EditorContent() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [repoUrlInput, setRepoUrlInput] = useState("");
   const [terminalCommand, setTerminalCommand] = useState("");
+  const [stdinInput, setStdinInput] = useState(""); // Input for programs that need stdin
+  const [repoBasePath, setRepoBasePath] = useState<string>(''); // Track the actual repository path
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [isResizing, setIsResizing] = useState(false);
   const searchParams = useSearchParams();
@@ -82,6 +85,8 @@ function EditorContent() {
   
   // Multi-agent debug state
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isDebugging, setIsDebugging] = useState(false);
+  const [isAIFixing, setIsAIFixing] = useState(false);
   const [analysisResults, setAnalysisResults] = useState<{
     errors?: Array<{ line: number; message: string; severity: string; type: string }>;
     fixes?: Array<{ line: number; original: string; fixed: string; reason: string }>;
@@ -98,6 +103,15 @@ function EditorContent() {
     editorResults?: {
       modifications: Array<{ type: string; description: string; lineStart: number; lineEnd: number }>;
       summary: string;
+    };
+    executionResults?: {
+      executed: boolean;
+      success: boolean;
+      stdout: string;
+      stderr: string;
+      exitCode: number;
+      executionTime: number;
+      errorMessage?: string;
     };
   } | null>(null);
   
@@ -280,18 +294,13 @@ function EditorContent() {
     }
 
     try {
-      console.log('Loading file:', filepath);
+      console.log('[loadFile] Loading file:', filepath);
+      console.log('[loadFile] SessionId:', session.sessionId);
       
-      // Verify file exists before trying to read
-      const verifyResult = await runCommand(`test -f "${filepath}" && echo "exists" || echo "not found"`);
-      if (verifyResult.stdout.includes('not found')) {
-        console.error('File not found:', filepath);
-        toast.error(`File not found: ${filepath}`);
-        return;
-      }
-      
+      // Try to read the file directly - let the API handle file existence
       const content = await readFile(filepath);
-      console.log('File content loaded, length:', content.length);
+      console.log('[loadFile] File content loaded, length:', content.length);
+      
       setCode(content);
       setSelectedFile(filepath);
       
@@ -310,8 +319,22 @@ function EditorContent() {
       const fileName = filepath.split('/').pop() || filepath;
       toast.success(`Loaded ${fileName}`);
     } catch (error) {
-      console.error('Failed to load file:', error);
-      toast.error('Failed to load file: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      console.error('[loadFile] Failed to load file:', filepath, error);
+      
+      // Try listing directory to see what files actually exist
+      const dir = filepath.substring(0, filepath.lastIndexOf('/'));
+      console.log('[loadFile] Checking directory:', dir);
+      
+      try {
+        const dirFiles = await listFiles(dir);
+        console.log('[loadFile] Files in directory:', dirFiles);
+        console.log('[loadFile] Looking for:', filepath);
+        console.log('[loadFile] File exists in listing:', dirFiles.includes(filepath));
+      } catch (listError) {
+        console.error('[loadFile] Failed to list directory:', listError);
+      }
+      
+      toast.error('Failed to load file: ' + (error instanceof Error ? error.message : 'File not found'));
     }
   };
 
@@ -475,8 +498,9 @@ function EditorContent() {
       console.log('Clone result:', result);
       
       if (result.success || result.exitCode === 0) {
-        // The actual cloned path will be repoPath/repoName
-        const clonedPath = `${repoPath}/${repoName}`;
+        // Use actualPath if available, otherwise construct it
+        const clonedPath = result.actualPath || `${repoPath}/${repoName}`;
+        console.log('Actual cloned path:', clonedPath);
         
         setOutput([
           '✓ Repository cloned successfully!',
@@ -520,7 +544,9 @@ function EditorContent() {
               
               console.log('Setting files state with', filesWithContent.length, 'files');
               console.log('Sample file paths:', fileList.slice(0, 3));
+              console.log('Storing repository base path:', tryPath);
               setFiles(filesWithContent);
+              setRepoBasePath(tryPath); // Store the base path for later file operations
               console.log('Switching to files view');
               
               setOutput(prev => [
@@ -827,15 +853,22 @@ function EditorContent() {
           <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
             <Settings className="h-4 w-4" />
           </Button>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="h-8 w-8 p-0"
-            onClick={() => router.push('/my-projects')}
-            title="Back to Projects"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
+          <Link href="/my-projects" passHref legacyBehavior>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-8 w-8 p-0"
+              onClick={(e) => {
+                console.log('[Back Button] Clicked - Navigating to /my-projects');
+              }}
+              title="Back to Projects"
+              asChild
+            >
+              <a>
+                <ArrowLeft className="h-4 w-4" />
+              </a>
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -1044,7 +1077,10 @@ function EditorContent() {
                       >
                         <button
                           className="flex-1 flex items-center gap-2 truncate"
-                          onClick={() => loadFile(file.path)}
+                          onClick={async () => {
+                            console.log('[File Click] Loading:', file.path);
+                            await loadFile(file.path);
+                          }}
                         >
                           {getFileIcon()}
                           <span className="truncate">{fileName}</span>
@@ -1338,112 +1374,297 @@ function EditorContent() {
                 
                 <ScrollArea className="flex-1 p-3">
                   <div className="space-y-3">
-                    <div className="p-3 border rounded-lg bg-background">
-                      <h3 className="text-sm font-semibold mb-2">Multi-Agent System</h3>
-                      <p className="text-xs text-muted-foreground mb-3">
-                        AI agents will analyze and fix your code automatically.
-                      </p>
-                      <Button
-                        onClick={async () => {
-                          if (!session || !selectedFile) {
-                            toast.error("No sandbox session or file selected");
-                            return;
-                          }
-                          
-                          if (!code.trim()) {
-                            toast.error("No code to analyze");
-                            return;
-                          }
-                          
-                          setIsAnalyzing(true);
-                          setAnalysisResults(null);
-                          toast.success("🤖 Multi-agent system analyzing...");
-                          
-                          try {
-                            // Trigger multi-agent orchestrator
-                            const triggerResponse = await fetch('/api/trigger-analysis', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                sessionId: session.sandboxId,
-                                code,
-                                language: getLanguageFromFile(selectedFile),
-                                filepath: selectedFile
-                              })
-                            });
+                    <div className="p-3 border rounded-lg bg-background space-y-2">
+                      <h3 className="text-sm font-semibold mb-2">Debug & Analysis</h3>
+                      
+                      {/* Simple Debugger Button - No AI */}
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Execute code and see results
+                        </p>
+                        
+                        <Button
+                          onClick={async () => {
+                            console.log('[Start Debugger] Button clicked');
+                            console.log('[Start Debugger] Session:', session);
+                            console.log('[Start Debugger] Selected file:', selectedFile);
                             
-                            if (triggerResponse.ok) {
-                              const triggerResult = await triggerResponse.json();
-                              console.log('🚀 Multi-agent orchestrator triggered:', triggerResult.eventId);
+                            if (!session || !selectedFile) {
+                              toast.error("No sandbox session or file selected");
+                              return;
                             }
                             
-                            // Get immediate results from Gemini
-                            const geminiResponse = await fetch('/api/analyze-code', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ 
-                                code, 
-                                language: getLanguageFromFile(selectedFile),
-                                filepath: selectedFile
-                              })
-                            });
-                            
-                            if (!geminiResponse.ok) {
-                              const errorData = await geminiResponse.json();
-                              throw new Error(errorData.error || 'Failed to analyze code');
+                            if (!code.trim()) {
+                              toast.error("No code to execute");
+                              return;
                             }
                             
-                            const result = await geminiResponse.json();
-                            console.log('✅ Analysis complete:', result);
+                            setIsDebugging(true);
+                            setAnalysisResults(null);
+                            toast.info("🔧 Executing code...");
+                            console.log('[Start Debugger] Selected file:', selectedFile);
+                            console.log('[Start Debugger] Language:', getLanguageFromFile(selectedFile));
+                            console.log('[Start Debugger] Calling /api/debug-simple with sessionId:', session.sessionId);
                             
-                            // Check if result has orchestrator format (finalCode) or regular format (fixedCode)
-                            const fixedCode = result.finalCode || result.fixedCode;
-                            
-                            if (fixedCode && fixedCode !== code) {
-                              // Apply the fixed code
-                              setCode(fixedCode);
-                              await writeFile(selectedFile, fixedCode);
+                            try {
+                              // Simple debug - just execute code
+                              const response = await fetch('/api/debug-simple', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ 
+                                  code, 
+                                  language: getLanguageFromFile(selectedFile),
+                                  filepath: selectedFile,
+                                  sessionId: session.sessionId
+                                })
+                              });
                               
-                              // Update files array
-                              setFiles(prev => prev.map(f => 
-                                f.path === selectedFile ? { ...f, content: fixedCode } : f
-                              ));
+                              if (!response.ok) {
+                                const errorData = await response.json();
+                                throw new Error(errorData.error || 'Failed to execute code');
+                              }
                               
-                              // Show results
-                              const errorCount = result.scanResults?.errors?.length || result.errors?.length || 0;
-                              const fixCount = result.fixResults?.changes?.length || result.fixes?.length || 0;
-                              const modCount = result.editorResults?.modifications?.length || 0;
+                              const result = await response.json();
+                              console.log('✅ Execution complete:', result);
                               
-                              const fileName = selectedFile.split('/').pop();
-                              toast.success(`✨ Fixed ${errorCount} errors, applied ${fixCount} fixes, made ${modCount} improvements in ${fileName}`);
+                              const executionSuccess = result.executionResults?.success;
+                              const { stdout, stderr, exitCode, executionTime, command } = result.executionResults;
                               
-                              // Set analysis results with full orchestrator data
+                              // Always show output in terminal
+                              const terminalOutput = [];
+                              
+                              // Show the command that was executed
+                              if (command) {
+                                terminalOutput.push('$ ' + command);
+                                terminalOutput.push('');
+                              }
+                              
+                              if (executionSuccess) {
+                                toast.success(`✅ Code executed successfully in ${executionTime}ms`);
+                                terminalOutput.push('✅ Execution Successful');
+                                terminalOutput.push('');
+                                if (stdout) {
+                                  terminalOutput.push('Output:');
+                                  terminalOutput.push(stdout);
+                                  console.log('📤 Output:', stdout);
+                                }
+                              } else {
+                                toast.error('❌ Execution failed');
+                                terminalOutput.push('❌ Execution Failed');
+                                terminalOutput.push('');
+                                if (stderr) {
+                                  terminalOutput.push('Error:');
+                                  terminalOutput.push(stderr);
+                                }
+                                if (result.executionResults.errorMessage && result.executionResults.errorMessage !== stderr) {
+                                  terminalOutput.push('');
+                                  terminalOutput.push('Details:');
+                                  terminalOutput.push(result.executionResults.errorMessage);
+                                }
+                              }
+                              
+                              terminalOutput.push('');
+                              terminalOutput.push(`Exit Code: ${exitCode}`);
+                              terminalOutput.push(`Execution Time: ${executionTime}ms`);
+                              
+                              setOutput(terminalOutput);
+                              setShowOutput(true);
+                              
+                              // Set analysis results
                               setAnalysisResults({
-                                errors: result.scanResults?.errors || result.errors || [],
-                                fixes: result.fixResults?.changes || result.fixes || [],
-                                fixedCode: fixedCode,
-                                summary: result.editorResults?.summary || result.summary || `Applied ${fixCount} fixes`,
-                                modifications: result.editorResults?.modifications || [],
+                                errors: [],
+                                fixes: [],
+                                fixedCode: code,
+                                summary: executionSuccess ? 'Code executed successfully' : 'Execution failed',
+                                modifications: [],
                                 scanResults: result.scanResults,
                                 fixResults: result.fixResults,
                                 editorResults: result.editorResults,
+                                executionResults: result.executionResults,
                               });
-                            } else {
-                              toast.success('✓ No issues found!');
+                            } catch (error) {
+                              console.error('[Start Debugger] Execution error:', error);
+                              toast.error(error instanceof Error ? error.message : 'Failed to execute code');
+                            } finally {
+                              setIsDebugging(false);
+                              console.log('[Start Debugger] Completed');
                             }
-                          } catch (error) {
-                            console.error('Multi-agent debug error:', error);
-                            toast.error(error instanceof Error ? error.message : 'Failed to debug code');
-                          } finally {
-                            setIsAnalyzing(false);
-                          }
-                        }}
-                        disabled={isAnalyzing || !session || !selectedFile}
-                        className="w-full"
-                        size="sm"
-                      >
-                        {isAnalyzing ? 'Analyzing...' : 'Start Multi-Agent Debug'}
-                      </Button>
+                          }}
+                          disabled={isDebugging || isAIFixing || !session || !selectedFile}
+                          className="w-full bg-white hover:bg-gray-50 text-gray-900 border border-gray-300 shadow-md hover:shadow-lg transition-all duration-200 font-medium"
+                          size="sm"
+                        >
+                          {isDebugging ? 'Debugging...' : '🔧 Start Debugger'}
+                        </Button>
+                      </div>
+                      
+                      <Separator />
+                      
+                      {/* AI Code Fix Button - Full Multi-Agent */}
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          AI agents analyze and fix your code
+                        </p>
+                        <Button
+                          onClick={async () => {
+                            console.log('[AI Code Fix] Button clicked');
+                            console.log('[AI Code Fix] Session:', session);
+                            console.log('[AI Code Fix] Selected file:', selectedFile);
+                            
+                            if (!session || !selectedFile) {
+                              toast.error("No sandbox session or file selected");
+                              return;
+                            }
+                            
+                            if (!code.trim()) {
+                              toast.error("No code to analyze");
+                              return;
+                            }
+                            
+                            setIsAIFixing(true);
+                            setAnalysisResults(null);
+                            toast.success("🤖 AI multi-agent system analyzing...");
+                            console.log('[AI Code Fix] Calling /api/analyze-code with sessionId:', session.sessionId);
+                            
+                            try {
+                              // Trigger multi-agent orchestrator
+                              const triggerResponse = await fetch('/api/trigger-analysis', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  sessionId: session.sessionId,
+                                  code,
+                                  language: getLanguageFromFile(selectedFile),
+                                  filepath: selectedFile
+                                })
+                              });
+                              
+                              if (triggerResponse.ok) {
+                                const triggerResult = await triggerResponse.json();
+                                console.log('🚀 Multi-agent orchestrator triggered:', triggerResult.eventId);
+                              }
+                              
+                              // Get immediate results from Gemini
+                              const geminiResponse = await fetch('/api/analyze-code', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ 
+                                  code, 
+                                  language: getLanguageFromFile(selectedFile),
+                                  filepath: selectedFile,
+                                  sessionId: session.sessionId  // Pass sessionId for code execution
+                                })
+                              });
+                              
+                              if (!geminiResponse.ok) {
+                                const errorData = await geminiResponse.json();
+                                throw new Error(errorData.error || 'Failed to analyze code');
+                              }
+                              
+                              const result = await geminiResponse.json();
+                              console.log('✅ Analysis complete:', result);
+                              
+                              // Check if result has orchestrator format (finalCode) or regular format (fixedCode)
+                              const fixedCode = result.finalCode || result.fixedCode;
+                              const additionalFiles = result.additionalFiles || [];
+                              
+                              if (fixedCode && fixedCode !== code) {
+                                // Apply the fixed code to the main file
+                                setCode(fixedCode);
+                                await writeFile(selectedFile, fixedCode);
+                                
+                                // Update files array for main file
+                                setFiles(prev => prev.map(f => 
+                                  f.path === selectedFile ? { ...f, content: fixedCode } : f
+                                ));
+                                
+                                // Handle additional files (e.g., header files for C++)
+                                if (additionalFiles.length > 0) {
+                                  console.log(`📁 Creating ${additionalFiles.length} additional files...`);
+                                  for (const file of additionalFiles) {
+                                    try {
+                                      // Determine the full path for the file
+                                      const basePath = selectedFile.substring(0, selectedFile.lastIndexOf('/') + 1);
+                                      const fullPath = file.filepath.startsWith('/') ? file.filepath : basePath + file.filepath;
+                                      
+                                      console.log(`Creating file: ${fullPath}`);
+                                      await writeFile(fullPath, file.content);
+                                      
+                                      // Add to files list if it's a new file
+                                      if (file.isNew) {
+                                        setFiles(prev => {
+                                          const exists = prev.some(f => f.path === fullPath);
+                                          if (!exists) {
+                                            return [...prev, { path: fullPath, content: file.content }];
+                                          }
+                                          return prev.map(f => f.path === fullPath ? { ...f, content: file.content } : f);
+                                        });
+                                      }
+                                      
+                                      toast.success(`📄 Created ${file.filepath}: ${file.reason}`);
+                                    } catch (err) {
+                                      console.error(`Failed to create ${file.filepath}:`, err);
+                                      toast.error(`Failed to create ${file.filepath}`);
+                                    }
+                                  }
+                                }
+                                
+                                // Show results
+                                const errorCount = result.scanResults?.errors?.length || result.errors?.length || 0;
+                                const fixCount = result.fixResults?.changes?.length || result.fixes?.length || 0;
+                                const modCount = result.editorResults?.modifications?.length || 0;
+                                const executionSuccess = result.executionResults?.success;
+                                const wasExecuted = result.executionResults?.executed;
+                                
+                                const fileName = selectedFile.split('/').pop();
+                                const filesCreated = additionalFiles.length > 0 ? ` + ${additionalFiles.length} file(s)` : '';
+                                const executionStatus = wasExecuted ? (executionSuccess ? ' ✅ Executed successfully!' : ' ❌ Execution failed!') : '';
+                                toast.success(`✨ Fixed ${errorCount} errors, applied ${fixCount} fixes, made ${modCount} improvements in ${fileName}${filesCreated}${executionStatus}`);
+                                
+                                // Show execution output if available
+                                if (wasExecuted && result.executionResults) {
+                                  const { stdout, stderr, exitCode } = result.executionResults;
+                                  if (stdout) {
+                                    console.log('📤 Execution Output:', stdout);
+                                    toast.success(`Output: ${stdout.substring(0, 100)}${stdout.length > 100 ? '...' : ''}`);
+                                  }
+                                  if (stderr) {
+                                    console.error('📤 Execution Error:', stderr);
+                                    toast.error(`Error: ${stderr.substring(0, 100)}${stderr.length > 100 ? '...' : ''}`);
+                                  }
+                                  console.log(`Exit Code: ${exitCode}`);
+                                }
+                                
+                                // Set analysis results with full orchestrator data
+                                setAnalysisResults({
+                                  errors: result.scanResults?.errors || result.errors || [],
+                                  fixes: result.fixResults?.changes || result.fixes || [],
+                                  fixedCode: fixedCode,
+                                  summary: result.editorResults?.summary || result.summary || `Applied ${fixCount} fixes`,
+                                  modifications: result.editorResults?.modifications || [],
+                                  scanResults: result.scanResults,
+                                  fixResults: result.fixResults,
+                                  editorResults: result.editorResults,
+                                  executionResults: result.executionResults,
+                                });
+                              } else {
+                                toast.success('✓ No issues found!');
+                              }
+                            } catch (error) {
+                              console.error('[AI Code Fix] Multi-agent debug error:', error);
+                              toast.error(error instanceof Error ? error.message : 'Failed to debug code');
+                            } finally {
+                              setIsAIFixing(false);
+                              console.log('[AI Code Fix] Completed');
+                            }
+                          }}
+                          disabled={isDebugging || isAIFixing || !session || !selectedFile}
+                          className="w-full bg-white hover:bg-gray-50 text-gray-900 border border-gray-300 shadow-md hover:shadow-lg transition-all duration-200 font-medium"
+                          size="sm"
+                        >
+                          {isAIFixing ? 'Analyzing...' : '🤖 AI Code Fix'}
+                        </Button>
+                      </div>
                     </div>
                     
                     <div className="space-y-2">
@@ -1473,14 +1694,35 @@ function EditorContent() {
 
                     {analysisResults && (
                       <div className="p-3 border rounded-lg bg-background space-y-2">
-                        <h4 className="text-xs font-semibold mb-2">🔍 Multi-Agent Analysis:</h4>
+                        <h4 className="text-xs font-semibold mb-2">
+                          {analysisResults.executionResults && !analysisResults.scanResults?.errors?.length ? '🔧 Debug Results:' : '🔍 Multi-Agent Analysis:'}
+                        </h4>
                         <div className="text-xs space-y-2">
-                          {/* Scan Results */}
-                          {analysisResults.scanResults && (
+                          {/* Execution Results - Always show if available */}
+                          {analysisResults.executionResults && analysisResults.executionResults.executed && (
+                            <div className={`p-2 border rounded ${analysisResults.executionResults.success ? 'bg-green-500/10 border-green-500/50' : 'bg-red-500/10 border-red-500/50'}`}>
+                              <div className="font-medium mb-1">Execution:</div>
+                              <div className={analysisResults.executionResults.success ? 'text-green-500' : 'text-red-500'}>
+                                {analysisResults.executionResults.success ? '✅ Success' : '❌ Failed'}
+                              </div>
+                              <div className="text-muted-foreground text-[10px] mt-1">
+                                Exit Code: {analysisResults.executionResults.exitCode} | Time: {analysisResults.executionResults.executionTime}ms
+                              </div>
+                              {analysisResults.executionResults.stdout && (
+                                <div className="text-[10px] mt-1 p-1 bg-muted rounded font-mono">
+                                  {analysisResults.executionResults.stdout.substring(0, 100)}
+                                  {analysisResults.executionResults.stdout.length > 100 && '...'}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Scan Results - Only for AI mode */}
+                          {analysisResults.scanResults && analysisResults.scanResults.errors && analysisResults.scanResults.errors.length > 0 && (
                             <div className="p-2 border rounded bg-muted/30">
                               <div className="font-medium mb-1">Scanner Agent:</div>
                               <div className="text-red-500">
-                                ❌ {analysisResults.scanResults.errors?.length || 0} errors found
+                                ❌ {analysisResults.scanResults.errors.length} errors found
                               </div>
                               {analysisResults.scanResults.suggestions?.length > 0 && (
                                 <div className="text-blue-500 text-[10px] mt-1">
@@ -1490,28 +1732,37 @@ function EditorContent() {
                             </div>
                           )}
                           
-                          {/* Fix Results */}
-                          {analysisResults.fixResults && (
+                          {/* Fix Results - Only for AI mode */}
+                          {analysisResults.fixResults && analysisResults.fixResults.changes && analysisResults.fixResults.changes.length > 0 && (
                             <div className="p-2 border rounded bg-muted/30">
                               <div className="font-medium mb-1">Fixer Agent:</div>
                               <div className="text-green-500">
-                                ✅ {analysisResults.fixResults.changes?.length || 0} fixes applied
+                                ✅ {analysisResults.fixResults.changes.length} fixes applied
                               </div>
                             </div>
                           )}
                           
-                          {/* Editor Results */}
-                          {analysisResults.editorResults && (
+                          {/* Editor Results - Only for AI mode */}
+                          {analysisResults.editorResults && analysisResults.editorResults.modifications && analysisResults.editorResults.modifications.length > 0 && (
                             <div className="p-2 border rounded bg-muted/30">
                               <div className="font-medium mb-1">Editor Agent:</div>
                               <div className="text-purple-500">
-                                ✨ {analysisResults.editorResults.modifications?.length || 0} improvements
+                                ✨ {analysisResults.editorResults.modifications.length} improvements
                               </div>
                               {analysisResults.editorResults.summary && (
                                 <div className="text-muted-foreground text-[10px] mt-1">
                                   {analysisResults.editorResults.summary}
                                 </div>
                               )}
+                            </div>
+                          )}
+                          
+                          {/* Simple debug mode message */}
+                          {analysisResults.scanResults?.suggestions?.[0]?.includes('without AI') && (
+                            <div className="p-2 border rounded bg-blue-500/10 border-blue-500/50">
+                              <div className="text-blue-500 text-[10px]">
+                                💡 Simple debug mode - code executed without AI analysis
+                              </div>
                             </div>
                           )}
                           
@@ -1546,99 +1797,37 @@ function EditorContent() {
 
         {/* Terminal Panel - Bottom */}
         {showOutput && (
-          <div className="h-64 border-t flex flex-col bg-muted/20 overflow-hidden">
-            <div className="h-10 border-b flex items-center justify-between px-3 bg-muted/30">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <Terminal className="h-4 w-4" />
-                TERMINAL
-              </div>
+          <div className="h-64 border-t flex flex-col bg-black">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700 bg-gray-900">
+              <span className="text-xs font-semibold text-gray-400">OUTPUT</span>
               <div className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-xs"
+                <button
                   onClick={() => setOutput([])}
+                  className="text-xs text-gray-400 hover:text-white px-2 py-1"
                 >
                   Clear
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0"
+                </button>
+                <button
                   onClick={() => setShowOutput(false)}
-                  title="Close Terminal"
+                  className="text-xs text-gray-400 hover:text-white px-2 py-1"
                 >
-                  <span className="text-xs">×</span>
-                </Button>
+                  ×
+                </button>
               </div>
             </div>
-            
             <ScrollArea className="flex-1 p-3">
-              {output.length === 0 ? (
-                <div className="text-muted-foreground text-sm italic">
-                  Interactive terminal. Type commands below or click &quot;Run&quot; to execute code.
-                </div>
-              ) : (
-                <div className="space-y-0.5 font-mono text-xs">
-                  {output.map((line, index) => (
-                    <div 
-                      key={index} 
-                      className={`
-                        ${line.startsWith('$') ? 'text-green-400 font-semibold' : ''}
-                        ${line.startsWith('ERROR:') || line.startsWith('Error:') ? 'text-red-500' : ''}
-                        ${line.startsWith('WARNING:') ? 'text-yellow-500' : ''}
-                        ${line.startsWith('✓') ? 'text-green-500' : ''}
-                        ${line.startsWith('✗') || line.startsWith('⚠') ? 'text-yellow-500' : ''}
-                        ${line.startsWith('⏳') ? 'text-blue-500' : ''}
-                        whitespace-pre-wrap break-words
-                      `}
-                    >
+              <div className="font-mono text-xs text-green-400 space-y-1">
+                {output.length === 0 ? (
+                  <div className="text-gray-500">Output will appear here...</div>
+                ) : (
+                  output.map((line, i) => (
+                    <div key={i} className="whitespace-pre-wrap break-all">
                       {line}
                     </div>
-                  ))}
-                </div>
-              )}
+                  ))
+                )}
+              </div>
             </ScrollArea>
-
-            {/* Terminal Input */}
-            <div className="border-t p-2 bg-muted/30">
-              <div className="flex gap-2 items-center mb-2">
-                <span className="text-green-400 font-mono text-sm">$</span>
-                <input
-                  type="text"
-                  value={terminalCommand}
-                  onChange={(e) => setTerminalCommand(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleTerminalCommand();
-                    }
-                  }}
-                  placeholder="Type command (e.g., ls, pwd, git status)..."
-                  className="flex-1 px-2 py-1 text-xs font-mono border rounded bg-background"
-                  disabled={!session}
-                />
-                <Button
-                  size="sm"
-                  onClick={handleTerminalCommand}
-                  disabled={!session || !terminalCommand.trim()}
-                  className="h-7 px-2 text-xs"
-                >
-                  Run
-                </Button>
-              </div>
-              <div className="text-xs text-muted-foreground flex items-center justify-between">
-                <span>
-                  {language === "javascript" && "JavaScript Runtime"}
-                  {language === "python" && "Python 3.11"}
-                  {language === "java" && "Java JDK 17"}
-                  {language === "cpp" && "G++ Compiler"}
-                </span>
-                <span className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${session ? 'bg-green-500' : 'bg-gray-500'}`} />
-                  {session ? 'Connected' : 'Disconnected'}
-                </span>
-              </div>
-            </div>
           </div>
         )}
         </div>
