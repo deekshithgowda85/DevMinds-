@@ -75,16 +75,12 @@ function EditorContent() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [repoUrlInput, setRepoUrlInput] = useState("");
   const [terminalCommand, setTerminalCommand] = useState("");
-  const [stdinInput, setStdinInput] = useState(""); // Input for programs that need stdin
-  const [repoBasePath, setRepoBasePath] = useState<string>(''); // Track the actual repository path
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [isResizing, setIsResizing] = useState(false);
   const searchParams = useSearchParams();
-  const router = useRouter();
   const hasClonedRef = useRef(false);
   
   // Multi-agent debug state
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isDebugging, setIsDebugging] = useState(false);
   const [isAIFixing, setIsAIFixing] = useState(false);
   const [analysisResults, setAnalysisResults] = useState<{
@@ -498,8 +494,8 @@ function EditorContent() {
       console.log('Clone result:', result);
       
       if (result.success || result.exitCode === 0) {
-        // Use actualPath if available, otherwise construct it
-        const clonedPath = result.actualPath || `${repoPath}/${repoName}`;
+        // Construct the cloned path
+        const clonedPath = `${repoPath}/${repoName}`;
         console.log('Actual cloned path:', clonedPath);
         
         setOutput([

@@ -1,169 +1,319 @@
-import { Card } from "@/components/ui/card";
+"use client";
+
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { 
-  Code2, 
-  Database, 
-  Smartphone, 
-  Cloud, 
-  Brain, 
-  Rocket,
-  CheckCircle2,
-  ArrowRight
-} from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { toast } from "sonner";
+import ReactFlow, { 
+  Background, 
+  Controls, 
+  MiniMap,
+  Node,
+  Edge
+} from 'reactflow';
+import 'reactflow/dist/style.css';
+import { GitBranch, Loader2, Download, Network } from "lucide-react";
 import Navbar from "../components/Navbar";
+import BackgroundBlobs from "../components/BackgroundBlobs";
 
-const services = [
-  {
-    icon: Code2,
-    title: "Web Development",
-    description: "Full-stack web applications using modern frameworks like React, Next.js, and Node.js",
-    features: [
-      "Responsive UI/UX Design",
-      "Performance Optimization",
-      "SEO Best Practices",
-      "Progressive Web Apps"
-    ],
-    color: "from-blue-500/20 to-blue-500/5"
-  },
-  {
-    icon: Smartphone,
-    title: "Mobile Development",
-    description: "Cross-platform mobile applications with React Native and Flutter",
-    features: [
-      "iOS & Android Apps",
-      "Native Performance",
-      "Offline Functionality",
-      "Push Notifications"
-    ],
-    color: "from-purple-500/20 to-purple-500/5"
-  },
-  {
-    icon: Database,
-    title: "Backend & APIs",
-    description: "Scalable backend systems and RESTful/GraphQL API development",
-    features: [
-      "Database Design",
-      "API Architecture",
-      "Authentication & Security",
-      "Microservices"
-    ],
-    color: "from-green-500/20 to-green-500/5"
-  },
-  {
-    icon: Brain,
-    title: "AI Integration",
-    description: "AI-powered features using OpenAI, Claude, and custom ML models",
-    features: [
-      "Chatbot Development",
-      "Natural Language Processing",
-      "Multi-Agent Systems",
-      "Custom AI Solutions"
-    ],
-    color: "from-orange-500/20 to-orange-500/5"
-  },
-  {
-    icon: Cloud,
-    title: "Cloud Solutions",
-    description: "Cloud infrastructure setup and deployment on AWS, Azure, and GCP",
-    features: [
-      "CI/CD Pipelines",
-      "Docker & Kubernetes",
-      "Serverless Architecture",
-      "Cloud Migration"
-    ],
-    color: "from-cyan-500/20 to-cyan-500/5"
-  },
-  {
-    icon: Rocket,
-    title: "Consulting",
-    description: "Technical consulting and architecture planning for your projects",
-    features: [
-      "Technology Stack Selection",
-      "System Architecture",
-      "Code Review",
-      "Performance Audit"
-    ],
-    color: "from-pink-500/20 to-pink-500/5"
-  }
-];
-
-const stats = [
-  { label: "Projects Completed", value: "50+" },
-  { label: "Happy Clients", value: "30+" },
-  { label: "Years Experience", value: "5+" },
-  { label: "Technologies", value: "25+" }
-];
+interface ProjectGraph {
+  nodes: Node[];
+  edges: Edge[];
+}
 
 export default function ServicesPage() {
+  const [repoUrl, setRepoUrl] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [graph, setGraph] = useState<ProjectGraph | null>(null);
+
+  const analyzeRepository = async () => {
+    if (!repoUrl.trim()) {
+      toast.error("Please enter a GitHub URL");
+      return;
+    }
+
+    // Validate URL format
+    const urlPattern = /^https?:\/\/(www\.)?github\.com\/[\w-]+\/[\w.-]+\/?$/;
+    const cleanUrl = repoUrl.trim().replace(/\.git$/, '');
+    
+    if (!urlPattern.test(cleanUrl)) {
+      toast.error("Invalid GitHub URL. Use format: https://github.com/username/repository");
+      return;
+    }
+
+    setIsAnalyzing(true);
+    toast.info("Cloning and analyzing repository...");
+
+    try {
+      const response = await fetch('/api/analyze-project', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repoUrl: cleanUrl }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Analysis failed');
+      }
+
+      const data = await response.json();
+      
+      if (!data.nodes || data.nodes.length === 0) {
+        toast.warning("No files found in repository");
+        return;
+      }
+      
+      setGraph(data);
+      toast.success(`Analyzed ${data.nodes.length} nodes and ${data.edges.length} connections`);
+    } catch (error) {
+      console.error('Analysis error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to analyze repository';
+      
+      if (errorMessage.includes('not found')) {
+        toast.error("Repository not found. Check the URL and ensure it's public.");
+      } else if (errorMessage.includes('private')) {
+        toast.error("Cannot access private repository. Please use a public repository.");
+      } else if (errorMessage.includes('Authentication')) {
+        toast.error("Authentication failed. Please use a public repository.");
+      } else {
+        toast.error(errorMessage);
+      }
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const downloadGraph = () => {
+    if (!graph) return;
+    
+    const blob = new Blob([JSON.stringify(graph, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'project-graph.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Graph downloaded');
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+    <div className="relative min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+      <BackgroundBlobs />
       <Navbar />
-      <div className="container mx-auto px-4 py-24">
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-16 text-center">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4">Services & Skills</h1>
-            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              Comprehensive development services to bring your ideas to life
+      
+      {/* Hero Section */}
+      <div className="relative pt-32 pb-16">
+        <div className="container mx-auto px-4 max-w-6xl">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 mb-6">
+              <Network className="w-4 h-4 text-purple-400" />
+              <span className="text-sm font-medium text-white">AI-Powered Analysis</span>
+            </div>
+            <h1 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-white via-purple-200 to-white bg-clip-text text-transparent">
+              Project Graph Analyzer
+            </h1>
+            <p className="text-lg text-slate-300 max-w-2xl mx-auto">
+              Visualize your repository structure instantly. Paste any GitHub URL to analyze files, dependencies, and architecture.
             </p>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-16">
-            {stats.map((stat) => (
-              <Card key={stat.label} className="p-6 text-center">
-                <div className="text-3xl md:text-4xl font-bold text-primary mb-2">
-                  {stat.value}
+          {/* Input Section */}
+          <Card className="backdrop-blur-xl bg-white/10 border-white/20 shadow-2xl">
+            <div className="p-8">
+              <div className="flex gap-4 mb-6">
+                <div className="flex-1">
+                  <Input
+                    placeholder="https://github.com/username/repository"
+                    value={repoUrl}
+                    onChange={(e) => setRepoUrl(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') analyzeRepository();
+                    }}
+                    disabled={isAnalyzing}
+                    className="h-12 bg-white/5 border-white/20 text-white placeholder:text-slate-400 focus:border-purple-400"
+                  />
                 </div>
-                <div className="text-sm text-muted-foreground">{stat.label}</div>
-              </Card>
-            ))}
-          </div>
+                <Button
+                  onClick={analyzeRepository}
+                  disabled={isAnalyzing || !repoUrl.trim()}
+                  className="h-12 px-8 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-semibold shadow-lg"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <GitBranch className="mr-2 h-5 w-5" />
+                      Analyze Repository
+                    </>
+                  )}
+                </Button>
+                {graph && (
+                  <Button 
+                    onClick={downloadGraph} 
+                    variant="outline"
+                    className="h-12 px-6 bg-white/5 border-white/20 text-white hover:bg-white/10"
+                  >
+                    <Download className="mr-2 h-5 w-5" />
+                    Export
+                  </Button>
+                )}
+              </div>
 
-          {/* Services Grid */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
-            {services.map((service) => {
-              const Icon = service.icon;
-              return (
-                <Card key={service.title} className="p-6 hover:shadow-lg transition-shadow">
-                  <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${service.color} flex items-center justify-center mb-4`}>
-                    <Icon className="w-6 h-6" />
+              {isAnalyzing && (
+                <div className="p-6 bg-purple-500/10 backdrop-blur-sm rounded-xl border border-purple-500/20">
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
+                    <div>
+                      <div className="text-white font-medium">Analyzing Repository</div>
+                      <div className="text-sm text-slate-300">Cloning and parsing project structure...</div>
+                    </div>
                   </div>
-                  <h3 className="text-xl font-bold mb-3">{service.title}</h3>
-                  <p className="text-muted-foreground text-sm mb-4">
-                    {service.description}
-                  </p>
-                  <ul className="space-y-2">
-                    {service.features.map((feature) => (
-                      <li key={feature} className="flex items-center gap-2 text-sm">
-                        <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />
-                        <span>{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              );
-            })}
-          </div>
-
-          {/* CTA Section */}
-          <Card className="p-8 md:p-12 text-center bg-gradient-to-br from-primary/10 to-primary/5">
-            <h2 className="text-3xl font-bold mb-4">Ready to Start Your Project?</h2>
-            <p className="text-muted-foreground mb-6 max-w-2xl mx-auto">
-              Let&apos;s discuss how I can help bring your ideas to life with cutting-edge technology and best practices.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button size="lg" className="gap-2">
-                Get in Touch
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-              <Button size="lg" variant="outline">
-                View Portfolio
-              </Button>
+                </div>
+              )}
             </div>
           </Card>
         </div>
       </div>
+
+      {/* Graph Section */}
+      {graph && (
+        <div className="relative py-12">
+          <div className="container mx-auto px-4 max-w-6xl">
+            {/* Stats Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              <Card className="backdrop-blur-xl bg-white/10 border-white/20 p-6 text-center">
+                <div className="text-3xl font-bold bg-gradient-to-r from-pink-400 to-pink-600 bg-clip-text text-transparent mb-2">
+                  {graph.nodes.filter(n => n.data?.type === 'page').length}
+                </div>
+                <div className="text-sm text-slate-300">Pages</div>
+              </Card>
+              <Card className="backdrop-blur-xl bg-white/10 border-white/20 p-6 text-center">
+                <div className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-purple-600 bg-clip-text text-transparent mb-2">
+                  {graph.nodes.filter(n => n.data?.type === 'component').length}
+                </div>
+                <div className="text-sm text-slate-300">Components</div>
+              </Card>
+              <Card className="backdrop-blur-xl bg-white/10 border-white/20 p-6 text-center">
+                <div className="text-3xl font-bold bg-gradient-to-r from-orange-400 to-orange-600 bg-clip-text text-transparent mb-2">
+                  {graph.nodes.filter(n => n.data?.type === 'api').length}
+                </div>
+                <div className="text-sm text-slate-300">API Routes</div>
+              </Card>
+              <Card className="backdrop-blur-xl bg-white/10 border-white/20 p-6 text-center">
+                <div className="text-3xl font-bold bg-gradient-to-r from-green-400 to-green-600 bg-clip-text text-transparent mb-2">
+                  {graph.nodes.filter(n => n.data?.type === 'lib').length}
+                </div>
+                <div className="text-sm text-slate-300">Libraries</div>
+              </Card>
+            </div>
+
+            {/* Additional Stats Row */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+              <Card className="backdrop-blur-xl bg-white/10 border-white/20 p-4 text-center">
+                <div className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-cyan-600 bg-clip-text text-transparent mb-1">
+                  {graph.nodes.filter(n => n.data?.type === 'model').length}
+                </div>
+                <div className="text-xs text-slate-300">Models</div>
+              </Card>
+              <Card className="backdrop-blur-xl bg-white/10 border-white/20 p-4 text-center">
+                <div className="text-2xl font-bold bg-gradient-to-r from-violet-400 to-violet-600 bg-clip-text text-transparent mb-1">
+                  {graph.nodes.filter(n => n.data?.type === 'hook').length}
+                </div>
+                <div className="text-xs text-slate-300">Hooks</div>
+              </Card>
+              <Card className="backdrop-blur-xl bg-white/10 border-white/20 p-4 text-center">
+                <div className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent mb-1">
+                  {graph.nodes.filter(n => n.data?.type === 'config').length}
+                </div>
+                <div className="text-xs text-slate-300">Configs</div>
+              </Card>
+              <Card className="backdrop-blur-xl bg-white/10 border-white/20 p-4 text-center">
+                <div className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent mb-1">
+                  {graph.nodes.filter(n => n.data?.type === 'function').length}
+                </div>
+                <div className="text-xs text-slate-300">Functions</div>
+              </Card>
+              <Card className="backdrop-blur-xl bg-white/10 border-white/20 p-4 text-center">
+                <div className="text-2xl font-bold bg-gradient-to-r from-slate-400 to-slate-600 bg-clip-text text-transparent mb-1">
+                  {graph.edges.length}
+                </div>
+                <div className="text-xs text-slate-300">Connections</div>
+              </Card>
+            </div>
+
+            {/* Graph Visualization */}
+            <Card className="backdrop-blur-xl bg-white/10 border-white/20 shadow-2xl">
+              <div className="p-6">
+                <div className="mb-6 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-white mb-2">Project Architecture</h2>
+                    <p className="text-sm text-slate-300">
+                      {graph.nodes.length} nodes • {graph.edges.length} connections
+                    </p>
+                  </div>
+                  <div className="flex gap-6">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-pink-500 shadow-lg shadow-pink-500/50" />
+                      <span className="text-sm text-slate-300">Pages</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-purple-500 shadow-lg shadow-purple-500/50" />
+                      <span className="text-sm text-slate-300">Components</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-orange-500 shadow-lg shadow-orange-500/50" />
+                      <span className="text-sm text-slate-300">API Routes</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-green-500 shadow-lg shadow-green-500/50" />
+                      <span className="text-sm text-slate-300">Libraries</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-cyan-500 shadow-lg shadow-cyan-500/50" />
+                      <span className="text-sm text-slate-300">Models</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="h-[600px] rounded-xl overflow-hidden bg-slate-950/50 backdrop-blur-sm border border-white/10">
+                  <ReactFlow
+                    nodes={graph.nodes}
+                    edges={graph.edges.map(edge => ({
+                      ...edge,
+                      animated: true,
+                      style: { stroke: '#94a3b8', strokeWidth: 2 }
+                    }))}
+                    fitView
+                    attributionPosition="bottom-left"
+                  >
+                    <Background color="#ffffff20" />
+                    <Controls className="bg-white/10 backdrop-blur-sm border-white/20" />
+                    <MiniMap 
+                      className="bg-white/10 backdrop-blur-sm border border-white/20"
+                      maskColor="rgb(15, 23, 42, 0.8)"
+                    />
+                  </ReactFlow>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* Custom CSS for animations */}
+      <style jsx global>{`
+        @keyframes blob {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          33% { transform: translate(30px, -50px) scale(1.1); }
+          66% { transform: translate(-20px, 20px) scale(0.9); }
+        }
+        .animate-blob {
+          animation: blob 7s infinite;
+        }
+      `}</style>
     </div>
   );
 }

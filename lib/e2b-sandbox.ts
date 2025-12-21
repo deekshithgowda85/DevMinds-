@@ -115,7 +115,7 @@ export class E2BSandboxManager {
 
     try {
       let command: string;
-      let filepath: string;
+      let filepath = params.filepath || '';
 
       switch (language.toLowerCase()) {
         case 'javascript':
@@ -205,7 +205,7 @@ export class E2BSandboxManager {
       }
       
       const proc = await this.sandbox.commands.run(finalCommand, {
-        timeout: 60000, // 60 second timeout
+        timeoutMs: 60000, // 60 second timeout
       });
       console.log(`[E2B] Execution complete. Exit code: ${proc.exitCode}`);
       console.log(`[E2B] stdout length: ${proc.stdout.length} chars`);
@@ -224,7 +224,7 @@ export class E2BSandboxManager {
       
       // Handle CommandExitError which contains stdout/stderr
       if (error && typeof error === 'object' && 'result' in error) {
-        const result = (error as any).result;
+        const result = (error as { result: ExecutionResult }).result;
         return {
           stdout: result.stdout || '',
           stderr: result.stderr || '',
@@ -249,7 +249,7 @@ export class E2BSandboxManager {
 
     try {
       const proc = await this.sandbox.commands.run(command, {
-        timeout: 60000, // 60 second timeout
+        timeoutMs: 60000, // 60 second timeout
       });
 
       return {
@@ -260,7 +260,7 @@ export class E2BSandboxManager {
     } catch (error) {
       // Handle CommandExitError which contains stdout/stderr
       if (error && typeof error === 'object' && 'result' in error) {
-        const result = (error as any).result;
+        const result = (error as { result: ExecutionResult }).result;
         return {
           stdout: result.stdout || '',
           stderr: result.stderr || '',
