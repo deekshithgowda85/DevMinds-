@@ -1,0 +1,39 @@
+// OLD STREAMING ENDPOINT - DEPRECATED AND DISABLED
+// This endpoint has been replaced by /api/stream/live which provides:
+// - Server-Sent Events (SSE) for real-time streaming
+// - Proper sandbox reuse (fixes rate limit issues)
+// - Better error handling
+//
+// This file is kept only for reference and backwards compatibility
+
+import { NextRequest, NextResponse } from 'next/server';
+
+export async function POST(request: NextRequest) {
+  console.log('[Deprecated] /api/browser/stream called - redirecting to /api/stream/live');
+  
+  return NextResponse.json({
+    error: 'This endpoint is deprecated. Please use /api/stream/live instead.',
+    migration: {
+      oldEndpoint: '/api/browser/stream',
+      newEndpoint: '/api/stream/live',
+      method: 'GET with EventSource',
+      example: 'const eventSource = new EventSource("/api/stream/live?taskId=123")',
+    },
+    success: false,
+  }, { status: 410 }); // 410 Gone - Resource permanently removed
+}
+
+export async function GET(request: NextRequest) {
+  console.log('[Deprecated] /api/browser/stream GET called - redirecting to /api/stream/live');
+  
+  return NextResponse.json({
+    error: 'This endpoint is deprecated. Please use /api/stream/live instead.',
+    migration: {
+      oldEndpoint: '/api/browser/stream',
+      newEndpoint: '/api/stream/live',
+      method: 'GET with EventSource',
+      example: 'const eventSource = new EventSource("/api/stream/live?taskId=123")',
+    },
+    success: false,
+  }, { status: 410 });
+}
