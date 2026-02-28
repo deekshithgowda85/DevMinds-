@@ -229,7 +229,7 @@ export default function Home() {
     }
   };
   return (
-    <main className="h-screen flex bg-gray-950">
+    <main className="h-screen flex bg-gray-950 relative">
       {/* Left Panel - Chat (1/4 width) */}
       <div className="w-1/4 min-w-[300px]">
         <ChatPanel onSendMessage={handleSendMessage} messages={messages} />
@@ -243,6 +243,14 @@ export default function Home() {
           onRefresh={handleRefresh}
         />
       </div>
+
+      {/* DevMind Link */}
+      <a
+        href="/devmind"
+        className="absolute bottom-4 right-4 px-3 py-1.5 rounded-full text-xs font-medium bg-purple-600/20 text-purple-400 border border-purple-600/30 hover:bg-purple-600/40 transition-all z-50"
+      >
+        🧠 DevMind
+      </a>
     </main>
   );
 }

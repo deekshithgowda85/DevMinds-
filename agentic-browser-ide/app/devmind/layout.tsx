@@ -66,6 +66,14 @@ export default function DevMindLayout({
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {children}
       </main>
+
+      {/* Footer */}
+      <footer className="border-t border-[#222] mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between text-xs text-[#555]">
+          <span>Powered by DevMind Memory Engine</span>
+          <span>Groq + Pinecone + Neon</span>
+        </div>
+      </footer>
     </div>
   );
 }
