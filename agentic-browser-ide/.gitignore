@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# DevMind internal build plan (not for git)
+DEVMIND_BUILD_PLAN.md
+
+/lib/generated/prisma

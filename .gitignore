@@ -28,6 +28,9 @@ yarn-error.log*
 .env*.local
 .env
 
+# DevMind internal build plan (not for git)
+DEVMIND_BUILD_PLAN.md
+
 # vercel
 .vercel
 
