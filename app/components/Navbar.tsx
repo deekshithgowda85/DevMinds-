@@ -66,6 +66,12 @@ const Navbar = () => {
             >
               Services
             </Link>
+            <Link
+              href="/devmind"
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              DevMind
+            </Link>
           </div>
         </div>
         <div className="flex items-center space-x-4">
@@ -192,6 +198,12 @@ const Navbar = () => {
                   className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Services
+                </Link>
+                <Link
+                  href="/devmind"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  DevMind
                 </Link>
                 <Link
                   href="/profile"
