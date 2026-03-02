@@ -28,33 +28,10 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { CommitDialog } from "./components/CommitDialog";
+import { DevMindPanel } from "./components/DevMindPanel";
+import type { DevMindTab } from "./components/DevMindPanel";
 import { useE2BSandbox } from "@/hooks/use-e2b-sandbox";
 import { toast } from "sonner";
-
-// Helper function to detect language from file extension
-const getLanguageFromFile = (filepath: string): string => {
-  const ext = filepath.split('.').pop()?.toLowerCase() || '';
-  const languageMap: Record<string, string> = {
-    'js': 'javascript',
-    'jsx': 'javascript',
-    'ts': 'typescript',
-    'tsx': 'typescript',
-    'py': 'python',
-    'java': 'java',
-    'cpp': 'cpp',
-    'cc': 'cpp',
-    'cxx': 'cpp',
-    'c': 'c',
-    'cs': 'csharp',
-    'go': 'go',
-    'rs': 'rust',
-    'rb': 'ruby',
-    'php': 'php',
-    'swift': 'swift',
-    'kt': 'kotlin',
-  };
-  return languageMap[ext] || 'plaintext';
-};
 
 function EditorContent() {
   const [language, setLanguage] = useState<"javascript" | "python" | "java" | "cpp">("javascript");
@@ -80,36 +57,10 @@ function EditorContent() {
   const searchParams = useSearchParams();
   const hasClonedRef = useRef(false);
   
-  // Multi-agent debug state
-  const [isDebugging, setIsDebugging] = useState(false);
-  const [isAIFixing, setIsAIFixing] = useState(false);
-  const [analysisResults, setAnalysisResults] = useState<{
-    errors?: Array<{ line: number; message: string; severity: string; type: string }>;
-    fixes?: Array<{ line: number; original: string; fixed: string; reason: string }>;
-    fixedCode?: string;
-    summary?: string;
-    modifications?: Array<{ type: string; description: string; lineStart: number; lineEnd: number }>;
-    scanResults?: {
-      errors: Array<{ line: number; message: string; severity: string; type: string }>;
-      suggestions: string[];
-    };
-    fixResults?: {
-      changes: Array<{ line: number; original: string; fixed: string; reason: string }>;
-    };
-    editorResults?: {
-      modifications: Array<{ type: string; description: string; lineStart: number; lineEnd: number }>;
-      summary: string;
-    };
-    executionResults?: {
-      executed: boolean;
-      success: boolean;
-      stdout: string;
-      stderr: string;
-      exitCode: number;
-      executionTime: number;
-      errorMessage?: string;
-    };
-  } | null>(null);
+  // DevMind integration state
+  const [selectedText, setSelectedText] = useState("");
+  const [devMindTab, setDevMindTab] = useState<DevMindTab>("trace");
+  const editorRef = useRef<Parameters<NonNullable<Parameters<typeof Editor>[0]['onMount']>>[0] | null>(null);
   
   // E2B Sandbox integration
   const {
@@ -960,7 +911,7 @@ function EditorContent() {
             size="sm"
             className="h-9 w-9 p-0"
             onClick={() => setShowAiAgent(!showAiAgent)}
-            title="Toggle AI Agent"
+            title="Toggle DevMind"
           >
             <Code className="h-4 w-4" />
           </Button>
@@ -1304,10 +1255,10 @@ function EditorContent() {
                     size="sm"
                     className="h-7 gap-1.5 px-2"
                     onClick={() => setShowAiAgent(true)}
-                    title="Open AI Agent"
+                    title="Open DevMind"
                   >
                     <Code className="h-3 w-3" />
-                    <span className="text-xs">AI Agent</span>
+                    <span className="text-xs">DevMind</span>
                   </Button>
                 )}
                 {!showOutput && (
@@ -1333,6 +1284,13 @@ function EditorContent() {
               language={language === "cpp" ? "cpp" : language}
               value={code}
               onChange={handleEditorChange}
+              onMount={(editor) => {
+                editorRef.current = editor;
+                editor.onDidChangeCursorSelection(() => {
+                  const sel = editor.getModel()?.getValueInRange(editor.getSelection()!);
+                  setSelectedText(sel || "");
+                });
+              }}
               theme={resolvedTheme === "dark" ? "vs-dark" : "light"}
               options={{
                 fontSize: 14,
@@ -1353,445 +1311,23 @@ function EditorContent() {
           </div>
         </div>
 
-            {/* AI Agent Panel - Right Side */}
+            {/* DevMind Panel - Right Side */}
             {showAiAgent && (
-              <div className="w-80 border-l flex flex-col bg-muted/20 overflow-hidden">
-                <div className="h-10 border-b flex items-center justify-between px-3 bg-muted/30">
-                  <div className="flex items-center gap-2 text-sm font-semibold">
-                    <Code className="h-4 w-4" />
-                    AI AGENT
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0"
-                    onClick={() => setShowAiAgent(false)}
-                    title="Close AI Agent"
-                  >
-                    <span className="text-xs">×</span>
-                  </Button>
-                </div>
-                
-                <ScrollArea className="flex-1 p-3">
-                  <div className="space-y-3">
-                    <div className="p-3 border rounded-lg bg-background space-y-2">
-                      <h3 className="text-sm font-semibold mb-2">Debug & Analysis</h3>
-                      
-                      {/* Simple Debugger Button - No AI */}
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-2">
-                          Execute code and see results
-                        </p>
-                        
-                        <Button
-                          onClick={async () => {
-                            console.log('[Start Debugger] Button clicked');
-                            console.log('[Start Debugger] Session:', session);
-                            console.log('[Start Debugger] Selected file:', selectedFile);
-                            
-                            if (!session || !selectedFile) {
-                              toast.error("No sandbox session or file selected");
-                              return;
-                            }
-                            
-                            if (!code.trim()) {
-                              toast.error("No code to execute");
-                              return;
-                            }
-                            
-                            setIsDebugging(true);
-                            setAnalysisResults(null);
-                            toast.info("🔧 Executing code...");
-                            console.log('[Start Debugger] Selected file:', selectedFile);
-                            console.log('[Start Debugger] Language:', getLanguageFromFile(selectedFile));
-                            console.log('[Start Debugger] Calling /api/debug-simple with sessionId:', session.sessionId);
-                            
-                            try {
-                              // Simple debug - just execute code
-                              const response = await fetch('/api/debug-simple', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ 
-                                  code, 
-                                  language: getLanguageFromFile(selectedFile),
-                                  filepath: selectedFile,
-                                  sessionId: session.sessionId
-                                })
-                              });
-                              
-                              if (!response.ok) {
-                                const errorData = await response.json();
-                                throw new Error(errorData.error || 'Failed to execute code');
-                              }
-                              
-                              const result = await response.json();
-                              console.log('✅ Execution complete:', result);
-                              
-                              const executionSuccess = result.executionResults?.success;
-                              const { stdout, stderr, exitCode, executionTime, command } = result.executionResults;
-                              
-                              // Always show output in terminal
-                              const terminalOutput = [];
-                              
-                              // Show the command that was executed
-                              if (command) {
-                                terminalOutput.push('$ ' + command);
-                                terminalOutput.push('');
-                              }
-                              
-                              if (executionSuccess) {
-                                toast.success(`✅ Code executed successfully in ${executionTime}ms`);
-                                terminalOutput.push('✅ Execution Successful');
-                                terminalOutput.push('');
-                                if (stdout) {
-                                  terminalOutput.push('Output:');
-                                  terminalOutput.push(stdout);
-                                  console.log('📤 Output:', stdout);
-                                }
-                              } else {
-                                toast.error('❌ Execution failed');
-                                terminalOutput.push('❌ Execution Failed');
-                                terminalOutput.push('');
-                                if (stderr) {
-                                  terminalOutput.push('Error:');
-                                  terminalOutput.push(stderr);
-                                }
-                                if (result.executionResults.errorMessage && result.executionResults.errorMessage !== stderr) {
-                                  terminalOutput.push('');
-                                  terminalOutput.push('Details:');
-                                  terminalOutput.push(result.executionResults.errorMessage);
-                                }
-                              }
-                              
-                              terminalOutput.push('');
-                              terminalOutput.push(`Exit Code: ${exitCode}`);
-                              terminalOutput.push(`Execution Time: ${executionTime}ms`);
-                              
-                              setOutput(terminalOutput);
-                              setShowOutput(true);
-                              
-                              // Set analysis results
-                              setAnalysisResults({
-                                errors: [],
-                                fixes: [],
-                                fixedCode: code,
-                                summary: executionSuccess ? 'Code executed successfully' : 'Execution failed',
-                                modifications: [],
-                                scanResults: result.scanResults,
-                                fixResults: result.fixResults,
-                                editorResults: result.editorResults,
-                                executionResults: result.executionResults,
-                              });
-                            } catch (error) {
-                              console.error('[Start Debugger] Execution error:', error);
-                              toast.error(error instanceof Error ? error.message : 'Failed to execute code');
-                            } finally {
-                              setIsDebugging(false);
-                              console.log('[Start Debugger] Completed');
-                            }
-                          }}
-                          disabled={isDebugging || isAIFixing || !session || !selectedFile}
-                          className="w-full bg-white hover:bg-gray-50 text-gray-900 border border-gray-300 shadow-md hover:shadow-lg transition-all duration-200 font-medium"
-                          size="sm"
-                        >
-                          {isDebugging ? 'Debugging...' : '🔧 Start Debugger'}
-                        </Button>
-                      </div>
-                      
-                      <Separator />
-                      
-                      {/* AI Code Fix Button - Full Multi-Agent */}
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-2">
-                          AI agents analyze and fix your code
-                        </p>
-                        <Button
-                          onClick={async () => {
-                            console.log('[AI Code Fix] Button clicked');
-                            console.log('[AI Code Fix] Session:', session);
-                            console.log('[AI Code Fix] Selected file:', selectedFile);
-                            
-                            if (!session || !selectedFile) {
-                              toast.error("No sandbox session or file selected");
-                              return;
-                            }
-                            
-                            if (!code.trim()) {
-                              toast.error("No code to analyze");
-                              return;
-                            }
-                            
-                            setIsAIFixing(true);
-                            setAnalysisResults(null);
-                            toast.success("🤖 AI multi-agent system analyzing...");
-                            console.log('[AI Code Fix] Calling /api/analyze-code with sessionId:', session.sessionId);
-                            
-                            try {
-                              // Trigger multi-agent orchestrator
-                              const triggerResponse = await fetch('/api/trigger-analysis', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  sessionId: session.sessionId,
-                                  code,
-                                  language: getLanguageFromFile(selectedFile),
-                                  filepath: selectedFile
-                                })
-                              });
-                              
-                              if (triggerResponse.ok) {
-                                const triggerResult = await triggerResponse.json();
-                                console.log('🚀 Multi-agent orchestrator triggered:', triggerResult.eventId);
-                              }
-                              
-                              // Get immediate results from Gemini
-                              const geminiResponse = await fetch('/api/analyze-code', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ 
-                                  code, 
-                                  language: getLanguageFromFile(selectedFile),
-                                  filepath: selectedFile,
-                                  sessionId: session.sessionId  // Pass sessionId for code execution
-                                })
-                              });
-                              
-                              if (!geminiResponse.ok) {
-                                const errorData = await geminiResponse.json();
-                                throw new Error(errorData.error || 'Failed to analyze code');
-                              }
-                              
-                              const result = await geminiResponse.json();
-                              console.log('✅ Analysis complete:', result);
-                              
-                              // Check if result has orchestrator format (finalCode) or regular format (fixedCode)
-                              const fixedCode = result.finalCode || result.fixedCode;
-                              const additionalFiles = result.additionalFiles || [];
-                              
-                              if (fixedCode && fixedCode !== code) {
-                                // Apply the fixed code to the main file
-                                setCode(fixedCode);
-                                await writeFile(selectedFile, fixedCode);
-                                
-                                // Update files array for main file
-                                setFiles(prev => prev.map(f => 
-                                  f.path === selectedFile ? { ...f, content: fixedCode } : f
-                                ));
-                                
-                                // Handle additional files (e.g., header files for C++)
-                                if (additionalFiles.length > 0) {
-                                  console.log(`📁 Creating ${additionalFiles.length} additional files...`);
-                                  for (const file of additionalFiles) {
-                                    try {
-                                      // Determine the full path for the file
-                                      const basePath = selectedFile.substring(0, selectedFile.lastIndexOf('/') + 1);
-                                      const fullPath = file.filepath.startsWith('/') ? file.filepath : basePath + file.filepath;
-                                      
-                                      console.log(`Creating file: ${fullPath}`);
-                                      await writeFile(fullPath, file.content);
-                                      
-                                      // Add to files list if it's a new file
-                                      if (file.isNew) {
-                                        setFiles(prev => {
-                                          const exists = prev.some(f => f.path === fullPath);
-                                          if (!exists) {
-                                            return [...prev, { path: fullPath, content: file.content }];
-                                          }
-                                          return prev.map(f => f.path === fullPath ? { ...f, content: file.content } : f);
-                                        });
-                                      }
-                                      
-                                      toast.success(`📄 Created ${file.filepath}: ${file.reason}`);
-                                    } catch (err) {
-                                      console.error(`Failed to create ${file.filepath}:`, err);
-                                      toast.error(`Failed to create ${file.filepath}`);
-                                    }
-                                  }
-                                }
-                                
-                                // Show results
-                                const errorCount = result.scanResults?.errors?.length || result.errors?.length || 0;
-                                const fixCount = result.fixResults?.changes?.length || result.fixes?.length || 0;
-                                const modCount = result.editorResults?.modifications?.length || 0;
-                                const executionSuccess = result.executionResults?.success;
-                                const wasExecuted = result.executionResults?.executed;
-                                
-                                const fileName = selectedFile.split('/').pop();
-                                const filesCreated = additionalFiles.length > 0 ? ` + ${additionalFiles.length} file(s)` : '';
-                                const executionStatus = wasExecuted ? (executionSuccess ? ' ✅ Executed successfully!' : ' ❌ Execution failed!') : '';
-                                toast.success(`✨ Fixed ${errorCount} errors, applied ${fixCount} fixes, made ${modCount} improvements in ${fileName}${filesCreated}${executionStatus}`);
-                                
-                                // Show execution output if available
-                                if (wasExecuted && result.executionResults) {
-                                  const { stdout, stderr, exitCode } = result.executionResults;
-                                  if (stdout) {
-                                    console.log('📤 Execution Output:', stdout);
-                                    toast.success(`Output: ${stdout.substring(0, 100)}${stdout.length > 100 ? '...' : ''}`);
-                                  }
-                                  if (stderr) {
-                                    console.error('📤 Execution Error:', stderr);
-                                    toast.error(`Error: ${stderr.substring(0, 100)}${stderr.length > 100 ? '...' : ''}`);
-                                  }
-                                  console.log(`Exit Code: ${exitCode}`);
-                                }
-                                
-                                // Set analysis results with full orchestrator data
-                                setAnalysisResults({
-                                  errors: result.scanResults?.errors || result.errors || [],
-                                  fixes: result.fixResults?.changes || result.fixes || [],
-                                  fixedCode: fixedCode,
-                                  summary: result.editorResults?.summary || result.summary || `Applied ${fixCount} fixes`,
-                                  modifications: result.editorResults?.modifications || [],
-                                  scanResults: result.scanResults,
-                                  fixResults: result.fixResults,
-                                  editorResults: result.editorResults,
-                                  executionResults: result.executionResults,
-                                });
-                              } else {
-                                toast.success('✓ No issues found!');
-                              }
-                            } catch (error) {
-                              console.error('[AI Code Fix] Multi-agent debug error:', error);
-                              toast.error(error instanceof Error ? error.message : 'Failed to debug code');
-                            } finally {
-                              setIsAIFixing(false);
-                              console.log('[AI Code Fix] Completed');
-                            }
-                          }}
-                          disabled={isDebugging || isAIFixing || !session || !selectedFile}
-                          className="w-full bg-white hover:bg-gray-50 text-gray-900 border border-gray-300 shadow-md hover:shadow-lg transition-all duration-200 font-medium"
-                          size="sm"
-                        >
-                          {isAIFixing ? 'Analyzing...' : '🤖 AI Code Fix'}
-                        </Button>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 p-2 border rounded bg-background">
-                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                        <span className="text-xs">System Ready</span>
-                      </div>
-                    </div>
-
-                    <div className="p-3 border rounded-lg bg-background">
-                      <h4 className="text-xs font-semibold mb-2">Available Agents:</h4>
-                      <div className="space-y-1.5">
-                        <div className="text-xs p-2 rounded border">
-                          <div className="font-medium">Code Analyzer</div>
-                          <div className="text-muted-foreground text-[10px]">Analyzes code structure</div>
-                        </div>
-                        <div className="text-xs p-2 rounded border">
-                          <div className="font-medium">Debugger Agent</div>
-                          <div className="text-muted-foreground text-[10px]">Finds and fixes bugs</div>
-                        </div>
-                        <div className="text-xs p-2 rounded border">
-                          <div className="font-medium">Test Generator</div>
-                          <div className="text-muted-foreground text-[10px]">Creates test cases</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {analysisResults && (
-                      <div className="p-3 border rounded-lg bg-background space-y-2">
-                        <h4 className="text-xs font-semibold mb-2">
-                          {analysisResults.executionResults && !analysisResults.scanResults?.errors?.length ? '🔧 Debug Results:' : '🔍 Multi-Agent Analysis:'}
-                        </h4>
-                        <div className="text-xs space-y-2">
-                          {/* Execution Results - Always show if available */}
-                          {analysisResults.executionResults && analysisResults.executionResults.executed && (
-                            <div className={`p-2 border rounded ${analysisResults.executionResults.success ? 'bg-green-500/10 border-green-500/50' : 'bg-red-500/10 border-red-500/50'}`}>
-                              <div className="font-medium mb-1">Execution:</div>
-                              <div className={analysisResults.executionResults.success ? 'text-green-500' : 'text-red-500'}>
-                                {analysisResults.executionResults.success ? '✅ Success' : '❌ Failed'}
-                              </div>
-                              <div className="text-muted-foreground text-[10px] mt-1">
-                                Exit Code: {analysisResults.executionResults.exitCode} | Time: {analysisResults.executionResults.executionTime}ms
-                              </div>
-                              {analysisResults.executionResults.stdout && (
-                                <div className="text-[10px] mt-1 p-1 bg-muted rounded font-mono">
-                                  {analysisResults.executionResults.stdout.substring(0, 100)}
-                                  {analysisResults.executionResults.stdout.length > 100 && '...'}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          
-                          {/* Scan Results - Only for AI mode */}
-                          {analysisResults.scanResults && analysisResults.scanResults.errors && analysisResults.scanResults.errors.length > 0 && (
-                            <div className="p-2 border rounded bg-muted/30">
-                              <div className="font-medium mb-1">Scanner Agent:</div>
-                              <div className="text-red-500">
-                                ❌ {analysisResults.scanResults.errors.length} errors found
-                              </div>
-                              {analysisResults.scanResults.suggestions?.length > 0 && (
-                                <div className="text-blue-500 text-[10px] mt-1">
-                                  💡 {analysisResults.scanResults.suggestions.length} suggestions
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          
-                          {/* Fix Results - Only for AI mode */}
-                          {analysisResults.fixResults && analysisResults.fixResults.changes && analysisResults.fixResults.changes.length > 0 && (
-                            <div className="p-2 border rounded bg-muted/30">
-                              <div className="font-medium mb-1">Fixer Agent:</div>
-                              <div className="text-green-500">
-                                ✅ {analysisResults.fixResults.changes.length} fixes applied
-                              </div>
-                            </div>
-                          )}
-                          
-                          {/* Editor Results - Only for AI mode */}
-                          {analysisResults.editorResults && analysisResults.editorResults.modifications && analysisResults.editorResults.modifications.length > 0 && (
-                            <div className="p-2 border rounded bg-muted/30">
-                              <div className="font-medium mb-1">Editor Agent:</div>
-                              <div className="text-purple-500">
-                                ✨ {analysisResults.editorResults.modifications.length} improvements
-                              </div>
-                              {analysisResults.editorResults.summary && (
-                                <div className="text-muted-foreground text-[10px] mt-1">
-                                  {analysisResults.editorResults.summary}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          
-                          {/* Simple debug mode message */}
-                          {analysisResults.scanResults?.suggestions?.[0]?.includes('without AI') && (
-                            <div className="p-2 border rounded bg-blue-500/10 border-blue-500/50">
-                              <div className="text-blue-500 text-[10px]">
-                                💡 Simple debug mode - code executed without AI analysis
-                              </div>
-                            </div>
-                          )}
-                          
-                          {/* Fallback for simple results */}
-                          {!analysisResults.scanResults && analysisResults.errors && (
-                            <div className="text-red-500">Errors: {analysisResults.errors.length}</div>
-                          )}
-                          {!analysisResults.fixResults && analysisResults.fixes && (
-                            <div className="text-green-500">Fixes: {analysisResults.fixes.length}</div>
-                          )}
-                          {!analysisResults.editorResults && analysisResults.summary && (
-                            <div className="text-muted-foreground">{analysisResults.summary}</div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </ScrollArea>
-
-                <div className="border-t p-2 bg-muted/30">
-                  <div className="text-xs text-muted-foreground flex items-center justify-between">
-                    <span>Multi-Agent Debugger</span>
-                    <span className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${session ? 'bg-green-500' : 'bg-gray-500'}`} />
-                      {session ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              <DevMindPanel
+                code={code}
+                language={language}
+                terminalOutput={output}
+                selectedText={selectedText}
+                onClose={() => setShowAiAgent(false)}
+                onApplyFix={(fixedCode) => {
+                  setCode(fixedCode);
+                  if (selectedFile && session) {
+                    writeFile(selectedFile, fixedCode);
+                  }
+                }}
+                activeTab={devMindTab}
+                onTabChange={setDevMindTab}
+              />
             )}
           </div>
 
