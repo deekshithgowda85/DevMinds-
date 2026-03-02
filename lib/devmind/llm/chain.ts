@@ -1,5 +1,6 @@
 // ─── DevMind Chain — Full Debug + SmartDocs Pipeline ─────────
 // Orchestrates: Memory → Prompt → LLM → Store → Response
+// added muti agent debugger pipeline and smartdocs generator pipeline
 
 import { callLLMForJSON } from './groq';
 import { isGroqAvailable } from './groq';
