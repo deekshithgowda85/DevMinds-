@@ -66,7 +66,7 @@ export default function Features() {
               ✅
             </motion.div>
             <h3 className="text-xl font-semibold mb-2">Independent Validation</h3>
-            <p className="text-gray-300">Validator ensures fixes are correct and don't introduce new issues.</p>
+            <p className="text-gray-300">Validator ensures fixes are correct and don&apos;t introduce new issues.</p>
           </motion.div>
         </div>
       </div>

@@ -12,10 +12,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Separator } from "@/components/ui/separator";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/use-auth";
-import { createClient } from "@/lib/supabase/client";
+import { auth } from "@/lib/firebase/client";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -23,17 +22,10 @@ const Navbar = () => {
   const { theme, setTheme } = useTheme();
   const { user, loading } = useAuth();
   const router = useRouter();
-  const supabase = createClient();
 
-  const handleScroll = (id: string) => {
-    const element = document.getElementById(id);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    await auth.signOut();
     toast.success("Signed out successfully");
     router.push("/");
     router.refresh();

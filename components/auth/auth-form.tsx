@@ -56,8 +56,12 @@ export function AuthForm({ mode }: AuthFormProps) {
         router.push("/editor");
         router.refresh();
       }
-    } catch (error: any) {
-      toast.error(error.message || "Something went wrong");
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        toast.error(error.message || "Something went wrong");
+      } else {
+        toast.error("Something went wrong");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -74,7 +78,7 @@ export function AuthForm({ mode }: AuthFormProps) {
       });
 
       if (error) throw error;
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast.error("Failed to sign in with Google");
       setIsLoading(false);
     }

@@ -40,7 +40,7 @@ function saveUsers(users: Map<string, User>) {
 }
 
 // Load users on startup
-let users = loadUsers();
+const users = loadUsers();
 
 // Function to get users (allows signup route to share the same Map)
 export function getUsersStore() {

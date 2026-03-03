@@ -123,7 +123,7 @@ export default function Hero() {
               <Sparkles className="h-10 w-10 text-yellow-400" />
             </motion.div>
             <h3 className="text-2xl font-bold bg-linear-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent mb-2">Independent Validation</h3>
-            <p className="text-gray-300 text-sm">Validator ensures fixes are correct and don't introduce new bugs.</p>
+            <p className="text-gray-300 text-sm">Validator ensures fixes are correct and don&apos;t introduce new bugs.</p>
           </motion.div>
         </motion.div>
       </div>
