@@ -15,6 +15,7 @@ import {
 import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/use-auth";
 import { auth } from "@/lib/firebase/client";
+import { signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -25,7 +26,7 @@ const Navbar = () => {
 
 
   const handleSignOut = async () => {
-    await auth.signOut();
+    await signOut(auth);
     toast.success("Signed out successfully");
     router.push("/");
     router.refresh();
@@ -100,7 +101,7 @@ const Navbar = () => {
                     <DropdownMenuLabel>
                       <div className="flex flex-col space-y-1">
                         <p className="text-sm font-medium leading-none">
-                          {user.user_metadata?.full_name || "User"}
+                          {user.displayName || "User"}
                         </p>
                         <p className="text-xs leading-none text-muted-foreground">
                           {user.email}
@@ -163,7 +164,7 @@ const Navbar = () => {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">
-                            {user.user_metadata?.full_name || "User"}
+                            {user.displayName || "User"}
                           </p>
                           <p className="text-xs text-muted-foreground truncate">
                             {user.email}
