@@ -57,11 +57,12 @@ export default function DevMindLayout({ children }: { children: React.ReactNode 
 
       <Navbar />
 
-      <div className="flex flex-1">
+      {/* pt-20 pushes all content below the fixed floating navbar (~80px) */}
+      <div className="flex flex-1 pt-20">
 
         {/* Sidebar */}
         <aside
-          className={`fixed top-0 left-0 bottom-0 w-64 bg-card border-r border-border flex flex-col z-40 transition-transform duration-300 ease-in-out
+          className={`fixed top-20 left-0 bottom-0 w-64 bg-card border-r border-border flex flex-col z-40 transition-transform duration-300 ease-in-out
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
         >
           {/* Sidebar header with close button */}
@@ -167,12 +168,13 @@ export default function DevMindLayout({ children }: { children: React.ReactNode 
           <main className="flex-1 p-6 overflow-auto">
             {children}
           </main>
-          {/* Single fixed left button to open sidebar when closed */}
+          {/* Open sidebar button – positioned below the floating navbar */}
           {!sidebarOpen && (
             <button
               onClick={() => setSidebarOpen(true)}
               aria-label="Open sidebar"
               className="fixed left-4 top-1/2 z-50 -translate-y-1/2 p-3 rounded-full bg-purple-600 text-white shadow-lg hover:bg-purple-500 focus:outline-none"
+              style={{ top: 'calc(50% + 40px)' }}
             >
               <Menu className="w-5 h-5" />
             </button>
