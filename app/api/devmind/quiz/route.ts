@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma, isDatabaseConfigured } from '@/lib/devmind/database/postgres';
 import { callLLMForJSON, isGroqConfigured } from '@/lib/devmind/llm/groq';
+import { callGateway } from '@/lib/devmind/aws/gateway';
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -44,6 +45,42 @@ export async function POST(request: NextRequest) {
 
     const lang = language || 'python';
     const count = Math.min(questionCount || 5, 10);
+
+    // ── Try AWS Gateway first ──
+    const gwResponse = await callGateway({
+      userId, language: lang, code: '', actionType: 'quiz',
+    });
+
+    if (gwResponse?.success && gwResponse.data) {
+      const d = gwResponse.data;
+      console.log(`[Quiz API] AWS Gateway hit (cached: ${gwResponse.meta?.cached})`);
+      const questions = Array.isArray(d.questions)
+        ? (d.questions as Array<Record<string, unknown>>).map((q, i) => ({
+            id: (q.id as number) || i + 1,
+            question: (q.question as string) || '',
+            options: Array.isArray(q.options) ? q.options as string[] : [],
+            correctAnswer: typeof q.correctAnswer === 'string'
+              ? ['A','B','C','D'].indexOf(q.correctAnswer as string)
+              : (q.correctAnswer as number) ?? 0,
+            explanation: (q.explanation as string) || '',
+            concept: (q.concept as string) || '',
+            difficulty: ((q.difficulty as string) || 'medium') as 'easy' | 'medium' | 'hard',
+          }))
+        : [];
+      return NextResponse.json({
+        success: true,
+        quiz: {
+          title: `${lang} Practice Quiz`,
+          focusConcepts: ['general'],
+          questions,
+          generatedAt: new Date().toISOString(),
+        },
+        meta: gwResponse.meta,
+      });
+    }
+
+    // ── Fallback: local Groq pipeline ──
+    console.log('[Quiz API] Falling back to local Groq pipeline');
 
     // Check if Groq is configured
     if (!isGroqConfigured()) {
