@@ -1,0 +1,8 @@
+{
+  "name": "devmind-ai-orchestrator",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "DevMind AWS Lambda - AI orchestration with Bedrock + DynamoDB",
+  "main": "index.mjs",
+  "dependencies": {}
+}

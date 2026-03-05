@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { debugWithMemory } from '@/lib/devmind/llm/chain';
+import { callGateway } from '@/lib/devmind/aws/gateway';
 
 export async function POST(request: NextRequest) {
   try {
@@ -46,9 +47,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Run the full debug pipeline (sanitized log — no user content)
     console.log(`[API/debug] Request: lang=${language}, userId=<redacted>, errorLen=${errorMessage.length}`);
 
+    // ── Try AWS Gateway first (Bedrock + DynamoDB cache) ──
+    const gwResponse = await callGateway({
+      userId, language, code, error: errorMessage, actionType: 'fix',
+    });
+
+    if (gwResponse?.success && gwResponse.data) {
+      const d = gwResponse.data;
+      const rawConf = typeof d.confidenceScore === 'number' ? d.confidenceScore : 0.5;
+      // Component expects 0-100 scale; Lambda returns 0-1 decimal
+      const confidenceLevel = rawConf <= 1 ? Math.round(rawConf * 100) : Math.round(rawConf);
+      console.log(`[API/debug] AWS Gateway hit (cached: ${gwResponse.meta?.cached}, model: ${gwResponse.meta?.modelUsed})`);
+      return NextResponse.json({
+        success: true,
+        result: {
+          errorType: d.errorType || 'Unknown',
+          detectedConceptGap: d.conceptGap || '',
+          explanationSummary: d.analysis || d.fixExplanation || '',
+          fix: d.suggestedFix || '',
+          confidenceLevel,
+          isRecurring: false,
+          learningTip: d.learningTip || '',
+          similarPastErrors: 0,
+        },
+        memoryStats: { totalSessions: 0, similarErrors: 0 },
+        meta: gwResponse.meta,
+      });
+    }
+
+    // ── Fallback: local Groq pipeline ──
+    console.log('[API/debug] Falling back to local Groq pipeline');
     const result = await debugWithMemory({
       userId,
       language,

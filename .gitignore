@@ -2,6 +2,8 @@
 
 # dependencies
 /node_modules
+aws-lambda/node_modules
+aws-lambda/function.zip
 /.pnp
 .pnp.*
 .yarn/*
@@ -32,6 +34,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+
+# AWS credentials (NEVER commit)
+api-gateway-id.txt
 
 # user data
 /data/users.json
