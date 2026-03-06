@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Menu, Moon, Sun, LogOut, User, LogIn } from "lucide-react";
+import { Menu, Moon, Sun, LogOut, User, LogIn, UserPlus } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,24 +13,71 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "next-themes";
-import { useAuth } from "@/hooks/use-auth";
-import { auth } from "@/lib/firebase/client";
-import { signOut } from "firebase/auth";
+import { useDevMindAuth } from "@/hooks/use-devmind-auth";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useState, useEffect } from "react";
 
 const Navbar = () => {
   const { theme, setTheme } = useTheme();
-  const { user, loading } = useAuth();
+  const { user, loading, login, register, logout } = useDevMindAuth();
   const router = useRouter();
 
+  const [showAuthForm, setShowAuthForm] = useState(false);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authForm, setAuthForm] = useState({ username: "", password: "", displayName: "" });
+  const [authError, setAuthError] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [guestName, setGuestName] = useState<string | null>(null);
 
-  const handleSignOut = async () => {
-    await signOut(auth);
+  useEffect(() => {
+    const saved = localStorage.getItem("devmind-guest-name");
+    if (saved) setGuestName(saved);
+  }, []);
+
+  const isGuest = !user && !!guestName;
+  const displayName = user?.displayName || user?.username || guestName || "";
+
+  async function handleAuth(e: React.FormEvent) {
+    e.preventDefault();
+    setAuthError("");
+    setAuthLoading(true);
+    try {
+      if (authMode === "login") {
+        await login(authForm.username, authForm.password);
+      } else {
+        await register(authForm.username, authForm.password, authForm.displayName || undefined);
+      }
+      localStorage.removeItem("devmind-guest-name");
+      setGuestName(null);
+      setShowAuthForm(false);
+      setAuthForm({ username: "", password: "", displayName: "" });
+      toast.success(authMode === "login" ? "Signed in!" : "Account created!");
+    } catch (err: unknown) {
+      setAuthError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  function handleGuestSignIn() {
+    const name = "guest-" + Math.random().toString(36).slice(2, 8);
+    localStorage.setItem("devmind-guest-name", name);
+    setGuestName(name);
+    setShowAuthForm(false);
+    toast.success("Signed in as guest");
+  }
+
+  async function handleSignOut() {
+    if (user) {
+      await logout();
+    }
+    localStorage.removeItem("devmind-guest-name");
+    setGuestName(null);
     toast.success("Signed out successfully");
     router.push("/");
     router.refresh();
-  };
+  }
 
   return (
     <nav className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[96%] max-w-7xl">
@@ -88,12 +135,12 @@ const Navbar = () => {
           {/* Profile/Auth Section */}
           {!loading && (
             <>
-              {user ? (
+              {user || isGuest ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="rounded-full h-9 w-9 relative">
                       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-sm font-semibold text-primary-foreground">
-                        {user.email?.charAt(0).toUpperCase() || "U"}
+                        {displayName.charAt(0).toUpperCase() || "U"}
                       </div>
                     </Button>
                   </DropdownMenuTrigger>
@@ -101,10 +148,10 @@ const Navbar = () => {
                     <DropdownMenuLabel>
                       <div className="flex flex-col space-y-1">
                         <p className="text-sm font-medium leading-none">
-                          {user.displayName || "User"}
+                          {displayName}
                         </p>
                         <p className="text-xs leading-none text-muted-foreground">
-                          {user.email}
+                          {isGuest ? "Guest user" : `@${user?.username}`}
                         </p>
                       </div>
                     </DropdownMenuLabel>
@@ -129,15 +176,80 @@ const Navbar = () => {
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="rounded-full"
-                  onClick={() => router.push("/auth/login")}
-                >
-                  <LogIn className="mr-2 h-4 w-4" />
-                  Sign In
-                </Button>
+                <div className="relative">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full"
+                    onClick={() => setShowAuthForm(!showAuthForm)}
+                  >
+                    <LogIn className="mr-2 h-4 w-4" />
+                    Sign In
+                  </Button>
+
+                  {showAuthForm && (
+                    <div className="absolute right-0 top-full mt-2 w-72 rounded-xl bg-background border shadow-xl p-4 z-50">
+                      <form onSubmit={handleAuth} className="space-y-3">
+                        <p className="text-sm font-semibold text-foreground">
+                          {authMode === "login" ? "Sign In" : "Create Account"}
+                        </p>
+                        <input
+                          type="text"
+                          placeholder="Username"
+                          value={authForm.username}
+                          onChange={(e) => setAuthForm({ ...authForm, username: e.target.value })}
+                          required
+                          className="w-full px-3 py-2 rounded-lg text-sm bg-accent border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-purple-500"
+                        />
+                        {authMode === "register" && (
+                          <input
+                            type="text"
+                            placeholder="Display Name (optional)"
+                            value={authForm.displayName}
+                            onChange={(e) => setAuthForm({ ...authForm, displayName: e.target.value })}
+                            className="w-full px-3 py-2 rounded-lg text-sm bg-accent border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-purple-500"
+                          />
+                        )}
+                        <input
+                          type="password"
+                          placeholder="Password"
+                          value={authForm.password}
+                          onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })}
+                          required
+                          className="w-full px-3 py-2 rounded-lg text-sm bg-accent border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-purple-500"
+                        />
+                        {authError && <p className="text-xs text-destructive">{authError}</p>}
+                        <Button
+                          type="submit"
+                          disabled={authLoading}
+                          className="w-full rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm"
+                        >
+                          <LogIn className="mr-2 h-4 w-4" />
+                          {authLoading ? "Please wait..." : authMode === "login" ? "Sign In" : "Register"}
+                        </Button>
+                        <button
+                          type="button"
+                          onClick={() => { setAuthMode(authMode === "login" ? "register" : "login"); setAuthError(""); }}
+                          className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {authMode === "login" ? "Need an account? Register" : "Have an account? Sign In"}
+                        </button>
+                      </form>
+                      <div className="relative my-3">
+                        <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+                        <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">or</span></div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        className="w-full rounded-lg text-sm"
+                        onClick={handleGuestSignIn}
+                      >
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        Sign in as Guest
+                      </Button>
+                    </div>
+                  )}
+                </div>
               )}
             </>
           )}
@@ -155,19 +267,19 @@ const Navbar = () => {
             </SheetTrigger>
             <SheetContent side="right" className="w-[240px] sm:w-[300px]">
               <nav className="flex flex-col space-y-4">
-                {user && (
+                {(user || isGuest) && (
                   <>
                     <div className="pb-4 border-b">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-sm font-semibold text-primary-foreground">
-                          {user.email?.charAt(0).toUpperCase() || "U"}
+                          {displayName.charAt(0).toUpperCase() || "U"}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">
-                            {user.displayName || "User"}
+                            {displayName}
                           </p>
                           <p className="text-xs text-muted-foreground truncate">
-                            {user.email}
+                            {isGuest ? "Guest user" : `@${user?.username}`}
                           </p>
                         </div>
                       </div>
@@ -210,7 +322,7 @@ const Navbar = () => {
                 >
                   Editor
                 </Link>
-                {user ? (
+                {user || isGuest ? (
                   <Button
                     variant="outline"
                     className="mt-4 w-full justify-start text-red-600"
@@ -220,14 +332,24 @@ const Navbar = () => {
                     Sign Out
                   </Button>
                 ) : (
-                  <Button
-                    variant="default"
-                    className="mt-4 w-full"
-                    onClick={() => router.push("/auth/login")}
-                  >
-                    <LogIn className="mr-2 h-4 w-4" />
-                    Sign In
-                  </Button>
+                  <div className="mt-4 space-y-2">
+                    <Button
+                      variant="default"
+                      className="w-full"
+                      onClick={() => { setShowAuthForm(true); }}
+                    >
+                      <LogIn className="mr-2 h-4 w-4" />
+                      Sign In
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={handleGuestSignIn}
+                    >
+                      <UserPlus className="mr-2 h-4 w-4" />
+                      Sign in as Guest
+                    </Button>
+                  </div>
                 )}
               </nav>
             </SheetContent>

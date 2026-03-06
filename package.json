@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1003.0",
+    "@aws-sdk/client-dynamodb": "^3.1003.0",
     "@google/generative-ai": "^0.24.1",
     "@inngest/agent-kit": "^0.13.2",
     "@isomorphic-git/lightning-fs": "^4.6.2",

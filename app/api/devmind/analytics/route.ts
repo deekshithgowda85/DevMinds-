@@ -1,8 +1,8 @@
 // ─── DevMind Analytics API ───────────────────────────────────
-// GET /api/devmind/analytics — Aggregate learning analytics for charts
+// GET /api/devmind/analytics — Aggregate learning analytics from DynamoDB
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma, isDatabaseConfigured } from '@/lib/devmind/database/postgres';
+import { getUserSessions } from '@/lib/devmind/aws/sessions';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,52 +16,34 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (!isDatabaseConfigured()) {
+    // Fetch sessions from DynamoDB
+    let sessions: Awaited<ReturnType<typeof getUserSessions>> = [];
+    try {
+      sessions = await getUserSessions(userId);
+    } catch (e) {
+      console.warn('[Analytics] DynamoDB fetch failed:', e instanceof Error ? e.message : e);
+    }
+
+    if (sessions.length === 0) {
       return NextResponse.json({
         success: true,
         analytics: {
-          summary: { totalSessions: 0, uniqueErrorTypes: 0, uniqueLanguages: 0, avgConfidence: 0, currentStreak: 0, maxStreak: 0, activeDays: 0 },
-          errorDistribution: [], languageDistribution: [], confidenceTimeline: [], conceptGaps: [], dailyActivity: [], recurringMistakes: [], conceptWeaknesses: [],
+          totalSessions: 0,
+          totalConcepts: 0,
+          avgConfidence: 0,
+          strongLanguages: [],
+          recentSessions: [],
+          conceptsByLanguage: {},
+          confidenceOverTime: [],
         },
-        notice: 'Database not configured. Add a valid DATABASE_URL to .env.local.',
       });
     }
-
-    // Fetch all data in parallel
-    const [sessions, metrics] = await Promise.all([
-      prisma.debugSession.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'asc' },
-      }).catch(() => []),
-      prisma.learningMetric.findUnique({
-        where: { userId },
-      }).catch(() => null),
-    ]);
-
-    // ─── Error Type Distribution ───────────────────────
-    const errorTypeCounts: Record<string, number> = {};
-    sessions.forEach((s) => {
-      errorTypeCounts[s.errorType] = (errorTypeCounts[s.errorType] || 0) + 1;
-    });
-    const errorDistribution = Object.entries(errorTypeCounts)
-      .map(([type, count]) => ({ type, count }))
-      .sort((a, b) => b.count - a.count);
 
     // ─── Language Distribution ─────────────────────────
     const langCounts: Record<string, number> = {};
     sessions.forEach((s) => {
       langCounts[s.language] = (langCounts[s.language] || 0) + 1;
     });
-    const languageDistribution = Object.entries(langCounts)
-      .map(([language, count]) => ({ language, count }))
-      .sort((a, b) => b.count - a.count);
-
-    // ─── Confidence Over Time ──────────────────────────
-    const confidenceTimeline = sessions.map((s, i) => ({
-      session: i + 1,
-      confidence: s.confidenceLevel,
-      date: s.createdAt.toISOString().split('T')[0],
-    }));
 
     // ─── Concept Gap Frequency ─────────────────────────
     const conceptCounts: Record<string, number> = {};
@@ -70,71 +52,50 @@ export async function GET(request: NextRequest) {
         conceptCounts[s.conceptGap] = (conceptCounts[s.conceptGap] || 0) + 1;
       }
     });
-    const conceptGaps = Object.entries(conceptCounts)
-      .map(([concept, count]) => ({ concept, count }))
-      .sort((a, b) => b.count - a.count);
-
-    // ─── Daily Activity ────────────────────────────────
-    const dailyCounts: Record<string, number> = {};
-    sessions.forEach((s) => {
-      const day = s.createdAt.toISOString().split('T')[0];
-      dailyCounts[day] = (dailyCounts[day] || 0) + 1;
-    });
-    const dailyActivity = Object.entries(dailyCounts)
-      .map(([date, count]) => ({ date, count }))
-      .sort((a, b) => a.date.localeCompare(b.date));
-
-    // ─── Streak Calculation ────────────────────────────
-    let currentStreak = 0;
-    let maxStreak = 0;
-    const today = new Date();
-    const dateSet = new Set(Object.keys(dailyCounts));
-    
-    for (let i = 0; i < 365; i++) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().split('T')[0];
-      if (dateSet.has(key)) {
-        currentStreak++;
-        maxStreak = Math.max(maxStreak, currentStreak);
-      } else if (i > 0) {
-        break; // Streak broken
-      }
-    }
 
     // ─── Summary Stats ─────────────────────────────────
     const avgConfidence =
-      sessions.length > 0
-        ? Math.round(sessions.reduce((sum, s) => sum + s.confidenceLevel, 0) / sessions.length)
-        : 0;
+      sessions.reduce((sum, s) => sum + s.confidenceLevel, 0) / sessions.length;
 
-    const recurringMistakes = Array.isArray(metrics?.recurringMistakes)
-      ? (metrics.recurringMistakes as Array<{ errorType: string; count: number }>)
-      : [];
+    // ─── Build conceptsByLanguage from concept gaps ────
+    const conceptsByLanguage: Record<string, number> = {};
+    sessions.forEach((s) => {
+      conceptsByLanguage[s.language] = (conceptsByLanguage[s.language] || 0) + (s.conceptGap ? 1 : 0);
+    });
 
-    const conceptWeaknesses = Array.isArray(metrics?.conceptWeaknesses)
-      ? (metrics.conceptWeaknesses as Array<{ concept: string; count: number }>)
-      : [];
+    // ─── Build recentSessions ──────────────────────────
+    const recentSessions = sessions.slice(-10).reverse().map((s) => ({
+      date: s.createdAt.split('T')[0],
+      conceptsLearned: s.conceptGap ? 1 : 0,
+      avgConfidence: s.confidenceLevel,
+      language: s.language,
+      topics: s.conceptGap ? [s.conceptGap] : [],
+    }));
+
+    // ─── Strong languages (>= 3 sessions) ──────────────
+    const strongLanguages = Object.entries(langCounts)
+      .filter(([, count]) => count >= 3)
+      .map(([lang]) => lang);
+
+    // ─── Confidence over time ──────────────────────────
+    const confidenceOverTime = sessions.map((s) => ({
+      date: s.createdAt.split('T')[0],
+      confidence: s.confidenceLevel,
+    }));
+
+    // ─── Total concepts learned ────────────────────────
+    const totalConcepts = Object.keys(conceptCounts).length;
 
     return NextResponse.json({
       success: true,
       analytics: {
-        summary: {
-          totalSessions: sessions.length,
-          uniqueErrorTypes: Object.keys(errorTypeCounts).length,
-          uniqueLanguages: Object.keys(langCounts).length,
-          avgConfidence,
-          currentStreak,
-          maxStreak,
-          activeDays: Object.keys(dailyCounts).length,
-        },
-        errorDistribution,
-        languageDistribution,
-        confidenceTimeline,
-        conceptGaps,
-        dailyActivity,
-        recurringMistakes,
-        conceptWeaknesses,
+        totalSessions: sessions.length,
+        totalConcepts,
+        avgConfidence,
+        strongLanguages,
+        recentSessions,
+        conceptsByLanguage,
+        confidenceOverTime,
       },
     });
   } catch (error) {

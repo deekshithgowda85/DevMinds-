@@ -1,24 +1,27 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/use-auth';
-import { auth } from '@/lib/firebase/client';
+import { usePathname } from 'next/navigation';
+import { useDevMindAuth } from '@/hooks/use-devmind-auth';
 import Navbar from '../components/Navbar';
 import BackgroundBlobs from '../components/BackgroundBlobs';
-import { signOut, signInAnonymously } from 'firebase/auth';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Bug, BookOpen, FileText, Dumbbell,
-  BarChart2, LogOut, LogIn, User, X, ChevronRight, Menu,
+  BarChart2, User, X, ChevronRight, Menu,
 } from 'lucide-react';
 
 export default function DevMindLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const { user, loading } = useAuth();
+  const { user, loading } = useDevMindAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [signingInGuest, setSigningInGuest] = useState(false);
+  const [guestName, setGuestName] = useState<string | null>(null);
+
+  // Load guest name from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('devmind-guest-name');
+    if (saved) setGuestName(saved);
+  }, []);
 
   const navItems = [
     { href: '/devmind', label: 'Dashboard', icon: LayoutDashboard, exact: true },
@@ -32,23 +35,9 @@ export default function DevMindLayout({ children }: { children: React.ReactNode 
   const isActive = (item: { href: string; exact?: boolean }) =>
     item.exact ? pathname === item.href : pathname.startsWith(item.href);
 
-  const username = user?.isAnonymous
-    ? 'Guest'
-    : user?.displayName || user?.email?.split('@')[0] || '';
-
-  async function handleGuestSignIn() {
-    setSigningInGuest(true);
-    try {
-      await signInAnonymously(auth);
-    } finally {
-      setSigningInGuest(false);
-    }
-  }
-
-  async function handleSignOut() {
-    await signOut(auth);
-    router.push('/auth/login');
-  }
+  // Use DynamoDB user if signed in, otherwise guest name
+  const username = user?.displayName || user?.username || guestName || '';
+  const isGuest = !user && !!guestName;
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-foreground flex flex-col">
@@ -118,44 +107,22 @@ export default function DevMindLayout({ children }: { children: React.ReactNode 
           <div className="border-t border-border p-4">
             {!loading && (
               <>
-                {user ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center text-xs font-bold text-white uppercase">
-                        {username.charAt(0)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">{username}</p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {user.isAnonymous ? 'Guest Session' : user.email}
-                        </p>
-                      </div>
+                {(user || isGuest) ? (
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center text-xs font-bold text-white uppercase">
+                      {username.charAt(0)}
                     </div>
-                    <button
-                      onClick={handleSignOut}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      Sign Out
-                    </button>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{username}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {isGuest ? 'Guest user' : `@${user?.username}`}
+                      </p>
+                    </div>
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    <Link
-                      href="/auth/login"
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-white bg-purple-600 hover:bg-purple-500 transition-colors"
-                    >
-                      <LogIn className="w-3.5 h-3.5" />
-                      Sign In
-                    </Link>
-                    <button
-                      onClick={handleGuestSignIn}
-                      disabled={signingInGuest}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground border border-border hover:border-foreground/40 transition-all disabled:opacity-50"
-                    >
-                      <User className="w-3.5 h-3.5" />
-                      {signingInGuest ? 'Signing in...' : 'Continue as Guest'}
-                    </button>
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <User className="w-4 h-4" />
+                    <p className="text-xs">Sign in via navbar</p>
                   </div>
                 )}
               </>

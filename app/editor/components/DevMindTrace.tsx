@@ -116,21 +116,23 @@ export function DevMindTrace({ code, language, terminalOutput, onApplyFix }: Dev
         )}
 
         {/* Results */}
-        {result && (
+        {result && (() => {
+          const confPct = result.confidenceLevel <= 1 ? Math.round(result.confidenceLevel * 100) : Math.round(result.confidenceLevel);
+          return (
           <div className="space-y-2">
             {/* Confidence bar */}
             <div className="p-2 rounded border bg-muted/30">
               <div className="flex justify-between text-xs mb-1">
                 <span className="font-semibold">Confidence</span>
-                <span>{result.confidenceLevel}%</span>
+                <span>{confPct}%</span>
               </div>
               <div className="w-full bg-gray-700 rounded-full h-2">
                 <div
                   className="h-2 rounded-full transition-all"
                   style={{
-                    width: `${result.confidenceLevel}%`,
+                    width: `${confPct}%`,
                     backgroundColor:
-                      result.confidenceLevel >= 80 ? "#22c55e" : result.confidenceLevel >= 50 ? "#eab308" : "#ef4444",
+                      confPct >= 80 ? "#22c55e" : confPct >= 50 ? "#eab308" : "#ef4444",
                   }}
                 />
               </div>
@@ -184,7 +186,8 @@ export function DevMindTrace({ code, language, terminalOutput, onApplyFix }: Dev
               <span>Past similar: {result.similarPastErrors}</span>
             </div>
           </div>
-        )}
+          );
+        })()}
       </div>
     </ScrollArea>
   );

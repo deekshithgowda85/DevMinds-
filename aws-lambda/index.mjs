@@ -91,7 +91,7 @@ export const handler = async (event) => {
 
   try {
     // ── Step 1: Check cache ────────────────────────────────────────────────────
-    const requestHash = generateHash(code || '', error || '', actionType);
+    const requestHash = generateHash(code || '', error || '', actionType, language || '');
     const cached = await getCachedResponse(requestHash);
 
     if (cached) {

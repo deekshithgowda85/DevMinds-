@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateSmartDocs } from '@/lib/devmind/llm/chain';
 import { callGateway } from '@/lib/devmind/aws/gateway';
+import { getUserSessions } from '@/lib/devmind/aws/sessions';
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,9 +21,25 @@ export async function POST(request: NextRequest) {
 
     console.log(`[API/docs] Generating SmartDocs (userId length: ${userId.length})`);
 
+    // Fetch user's debug history from DynamoDB to provide context
+    let historyContext = '';
+    try {
+      const sessions = await getUserSessions(userId);
+      if (sessions.length > 0) {
+        const recent = sessions.slice(-10);
+        historyContext = recent.map((s) =>
+          `[${s.createdAt}] ${s.language} - ${s.errorType}: ${s.conceptGap}`
+        ).join('\n');
+      }
+    } catch { /* no history available */ }
+
     // ── Try AWS Gateway first ──
+    // Include history + timestamp in code field to prevent stale caching
     const gwResponse = await callGateway({
-      userId, language: 'javascript', code: '', actionType: 'docs',
+      userId,
+      language: 'javascript',
+      code: historyContext || `Generate fresh report at ${new Date().toISOString()}`,
+      actionType: 'docs',
     });
 
     if (gwResponse?.success && gwResponse.data) {
@@ -63,6 +80,11 @@ export async function POST(request: NextRequest) {
                 topic: s.topic || '',
                 reason: s.reason || '',
               })),
+            },
+            debugSpeedMetrics: {
+              title: 'Debug Speed Metrics',
+              avgConfidenceOverTime: [],
+              recurringErrorReduction: 'Keep debugging to build confidence metrics.',
             },
           },
           markdownReport: (d.markdownReport as string) || (d.analysis as string) || '',
