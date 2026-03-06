@@ -1,8 +1,11 @@
 // ─── AWS API Gateway Proxy ──────────────────────────────────────────────────
 // Utility to call DevMind Lambda via API Gateway
 // Falls back to local Groq pipeline if gateway is not configured
+// 
+// Environment variable: API_GATEWAY_URL (or AWS_API_GATEWAY_URL for local dev)
+// AWS Amplify blocks env vars starting with "AWS_", so use API_GATEWAY_URL in production
 
-const GATEWAY_URL = process.env.AWS_API_GATEWAY_URL;
+const GATEWAY_URL = process.env.API_GATEWAY_URL || process.env.AWS_API_GATEWAY_URL;
 
 export interface GatewayRequest {
   userId: string;
@@ -30,7 +33,7 @@ export interface GatewayResponse {
  */
 export async function callGateway(request: GatewayRequest): Promise<GatewayResponse | null> {
   if (!GATEWAY_URL) {
-    console.log('[Gateway] AWS_API_GATEWAY_URL not set, using local pipeline');
+    console.log('[Gateway] API_GATEWAY_URL not set, using local pipeline');
     return null;
   }
 
