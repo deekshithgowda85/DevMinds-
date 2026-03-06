@@ -110,7 +110,7 @@ const Navbar = () => {
               href="/devmind"
               className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
-              DevMind
+              Code Analyzer
             </Link>
           </div>
         </div>
@@ -308,7 +308,7 @@ const Navbar = () => {
                   href="/devmind"
                   className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  DevMind
+                  Code Analyzer
                 </Link>
                 <Link
                   href="/profile"

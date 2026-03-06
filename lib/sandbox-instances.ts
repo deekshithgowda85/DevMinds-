@@ -3,7 +3,6 @@ import { E2BSandboxManager } from './e2b-sandbox';
 // Use globalThis to ensure the Map persists across Next.js hot reloads and serverless invocations
 // This is a workaround for Next.js API routes not sharing module state
 declare global {
-  // eslint-disable-next-line no-var
   var __sandboxInstances: Map<string, E2BSandboxManager> | undefined;
 }
 

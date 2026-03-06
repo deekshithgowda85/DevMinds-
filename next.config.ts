@@ -1,15 +1,24 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  webpack: (config, { isServer }) => {
-    // Suppress "Critical dependency" warnings from e2b package
-    // (e2b uses dynamic require() internally — harmless)
-    if (isServer) {
-      config.externals = config.externals || [];
-      if (Array.isArray(config.externals)) {
-        config.externals.push('e2b');
-      }
-    }
+  // Packages that use dynamic require() / CJS internals must be excluded from
+  // the Next.js bundle and required at runtime instead.
+  serverExternalPackages: [
+    'e2b',
+    '@inngest/agent-kit',
+    'inngest',
+    '@opentelemetry/instrumentation-winston',
+    '@opentelemetry/auto-instrumentations-node',
+  ],
+  webpack: (config) => {
+    // Suppress any residual "Critical dependency" webpack warnings from
+    // packages that use dynamic require() expressions internally.
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings || []),
+      { module: /node_modules\/@opentelemetry/ },
+      { module: /node_modules\/inngest/ },
+      { module: /node_modules\/@inngest/ },
+    ];
     return config;
   },
 };

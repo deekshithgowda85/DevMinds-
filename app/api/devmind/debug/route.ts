@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(result);
-  } catch (error: unknown) {
+  } catch (_error: unknown) {
     console.error('[API/debug] Internal error occurred');
 
     return NextResponse.json(

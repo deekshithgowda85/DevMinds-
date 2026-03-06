@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
       success: true,
       report,
     });
-  } catch (error: unknown) {
+  } catch (_error: unknown) {
     console.error('[API/docs] Internal error occurred');
 
     return NextResponse.json(

@@ -51,9 +51,9 @@ export function DevMindPanel({
       <div className="h-10 border-b flex items-center justify-between px-3 bg-muted/30">
         <div className="flex items-center gap-1.5 text-sm font-semibold">
           <span className="text-base">{'\uD83E\uDDE0'}</span>
-          DevMind
+            Code Analyzer
         </div>
-        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onClose} title="Close DevMind">
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onClose} title="Close Code Analyzer">
           <span className="text-xs">{'\u00D7'}</span>
         </Button>
       </div>

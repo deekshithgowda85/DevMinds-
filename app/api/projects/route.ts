@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 // GET /api/projects - Get all projects for user
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ projects });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ project });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -134,7 +134,7 @@ export async function PUT(request: NextRequest) {
     }
 
     return NextResponse.json({ project });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -170,7 +170,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

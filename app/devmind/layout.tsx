@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useDevMindAuth } from '@/hooks/use-devmind-auth';
 import Navbar from '../components/Navbar';
 import BackgroundBlobs from '../components/BackgroundBlobs';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   LayoutDashboard, Bug, BookOpen, FileText, Dumbbell,
   BarChart2, User, X, ChevronRight, Menu,
@@ -15,13 +15,11 @@ export default function DevMindLayout({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const { user, loading } = useDevMindAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [guestName, setGuestName] = useState<string | null>(null);
-
-  // Load guest name from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('devmind-guest-name');
-    if (saved) setGuestName(saved);
-  }, []);
+  // Lazy-init from localStorage to avoid setState-in-effect lint error
+  const [guestName] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('devmind-guest-name');
+  });
 
   const navItems = [
     { href: '/devmind', label: 'Dashboard', icon: LayoutDashboard, exact: true },

@@ -70,11 +70,4 @@ export async function generateErrorEmbedding(
   return generateEmbedding(context);
 }
 
-/**
- * Pad or truncate a vector to the target length.
- */
-function padToLength(vec: number[], targetLength: number): number[] {
-  if (vec.length === targetLength) return vec;
-  if (vec.length > targetLength) return vec.slice(0, targetLength);
-  return [...vec, ...new Array(targetLength - vec.length).fill(0)];
-}
+

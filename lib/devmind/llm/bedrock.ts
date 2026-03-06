@@ -30,7 +30,7 @@ export function isBedrockConfigured(): boolean {
 
 function extractJSON(text: string): Record<string, unknown> | null {
   // Strip DeepSeek R1 <think>...</think> reasoning blocks
-  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  const cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
   try { return JSON.parse(cleaned); } catch {}
 

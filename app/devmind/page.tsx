@@ -75,7 +75,7 @@ export default function DevMindDashboard() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent">
-          DevMind
+          Code Analyzer
         </h1>
         <p className="text-[#666] text-sm mt-1">
           {username ? `Welcome back, ${username}` : 'Memory-Driven AI Debugging & Learning System'}

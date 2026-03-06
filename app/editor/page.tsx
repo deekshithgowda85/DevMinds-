@@ -51,7 +51,6 @@ function EditorContent() {
   const fileButtonRef = useRef<HTMLButtonElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [repoUrlInput, setRepoUrlInput] = useState("");
-  const [terminalCommand, setTerminalCommand] = useState("");
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [isResizing, setIsResizing] = useState(false);
   const searchParams = useSearchParams();
@@ -162,7 +161,7 @@ function EditorContent() {
             toast.success(`Loaded ${existingFiles.length} existing files from sandbox`);
             return;
           }
-        } catch (err) {
+        } catch (_err) {
           console.log('No existing files found, proceeding with clone');
         }
         
@@ -911,7 +910,7 @@ function EditorContent() {
             size="sm"
             className="h-9 w-9 p-0"
             onClick={() => setShowAiAgent(!showAiAgent)}
-            title="Toggle DevMind"
+            title="Toggle Code Analyzer"
           >
             <Code className="h-4 w-4" />
           </Button>
@@ -1255,10 +1254,10 @@ function EditorContent() {
                     size="sm"
                     className="h-7 gap-1.5 px-2"
                     onClick={() => setShowAiAgent(true)}
-                    title="Open DevMind"
+                    title="Open Code Analyzer"
                   >
                     <Code className="h-3 w-3" />
-                    <span className="text-xs">DevMind</span>
+                    <span className="text-xs">Code Analyzer</span>
                   </Button>
                 )}
                 {!showOutput && (

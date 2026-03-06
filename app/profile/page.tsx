@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { User, Mail, Save, Edit2, X, Loader2 } from "lucide-react";
+import { Mail, Save, Edit2, X, Loader2 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -114,7 +114,7 @@ export default function ProfilePage() {
         const error = await response.json();
         toast.error(error.error || "Failed to save profile");
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error("Error saving profile");
     } finally {
       setSaving(false);

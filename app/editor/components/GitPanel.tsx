@@ -17,11 +17,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   GitBranch,
   GitCommit,
-  GitPullRequest,
   Upload,
   Download,
   Settings,
-  Plus,
   RefreshCw,
 } from 'lucide-react';
 import { GitClient, type CommitInfo } from '@/lib/git-client';

@@ -50,15 +50,16 @@ export function AuthForm({ mode }: AuthFormProps) {
         router.push("/editor");
         router.refresh();
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as { code?: string; message?: string };
       const msg =
-        error.code === "auth/invalid-credential" || error.code === "auth/wrong-password"
+        err.code === "auth/invalid-credential" || err.code === "auth/wrong-password"
           ? "Invalid email or password"
-          : error.code === "auth/email-already-in-use"
+          : err.code === "auth/email-already-in-use"
           ? "Email already in use"
-          : error.code === "auth/weak-password"
+          : err.code === "auth/weak-password"
           ? "Password must be at least 6 characters"
-          : error.message || "Something went wrong";
+          : err.message || "Something went wrong";
       toast.error(msg);
     } finally {
       setIsLoading(false);

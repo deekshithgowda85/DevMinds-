@@ -11,13 +11,15 @@ export interface DevMindUser {
 export function useDevMindAuth() {
   const [user, setUser] = useState<DevMindUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [guestName, setGuestName] = useState<string | null>(null);
+  // Lazy-initialise from localStorage so it's available on first render
+  // without causing a cascading re-render inside an effect.
+  const [guestName] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('devmind-guest-name');
+  });
 
-  // Check session on mount + load guest name
+  // Check session on mount
   useEffect(() => {
-    const saved = localStorage.getItem('devmind-guest-name');
-    if (saved) setGuestName(saved);
-
     fetch('/api/auth/me')
       .then((res) => res.json())
       .then((data) => {

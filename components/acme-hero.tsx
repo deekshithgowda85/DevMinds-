@@ -1,10 +1,8 @@
 "use client";
 
-import { FingerprintIcon, Menu, Moon, Sun } from "lucide-react";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-
+import Image from "next/image";
+import { FingerprintIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { motion } from "motion/react";
 
 export function AcmeHero() {
@@ -89,10 +87,12 @@ export function AcmeHero() {
               >
                 <div className="relative w-full">
                   <div className="relative w-full rounded-3xl overflow-hidden border shadow-2xl bg-slate-950">
-                    <img
+                    <Image
                       src="/image.png"
                       alt="Multi-Agent Debugger Editor Preview"
-                      className="w-full h-full object-cover rounded-3xl"
+                      width={1920}
+                      height={1080}
+                      className="w-full h-auto object-cover rounded-3xl"
                     />
                   </div>
                   <div className="absolute inset-x-0 bottom-0 h-[50%] bg-gradient-to-t from-background to-transparent" />
