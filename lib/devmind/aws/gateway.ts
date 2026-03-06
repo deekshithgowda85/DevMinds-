@@ -2,7 +2,7 @@
 // Utility to call DevMind Lambda via API Gateway
 // Falls back to local Groq pipeline if gateway is not configured
 
-const GATEWAY_URL = process.env.AWS_API_GATEWAY_URL;
+const GATEWAY_URL = process.env.API_GATEWAY_URL || process.env.AWS_API_GATEWAY_URL;
 
 export interface GatewayRequest {
   userId: string;
@@ -30,7 +30,7 @@ export interface GatewayResponse {
  */
 export async function callGateway(request: GatewayRequest): Promise<GatewayResponse | null> {
   if (!GATEWAY_URL) {
-    console.log('[Gateway] AWS_API_GATEWAY_URL not set, using local pipeline');
+    console.log('[Gateway] API_GATEWAY_URL not set, using local pipeline');
     return null;
   }
 
