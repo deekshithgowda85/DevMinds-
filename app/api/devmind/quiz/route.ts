@@ -3,9 +3,9 @@
 // GET  /api/devmind/quiz — Get quiz history / stats
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma, isDatabaseConfigured } from '@/lib/devmind/database/postgres';
 import { callLLMForJSON, isGroqConfigured } from '@/lib/devmind/llm/groq';
 import { callGateway } from '@/lib/devmind/aws/gateway';
+import { getUserSessions } from '@/lib/devmind/aws/sessions';
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -47,8 +47,11 @@ export async function POST(request: NextRequest) {
     const count = Math.min(questionCount || 5, 10);
 
     // ── Try AWS Gateway first ──
+    // Include timestamp in code field to prevent cache returning same quiz
     const gwResponse = await callGateway({
-      userId, language: lang, code: '', actionType: 'quiz',
+      userId, language: lang,
+      code: `Generate unique quiz #${Date.now()} for ${lang} with ${count} questions`,
+      actionType: 'quiz',
     });
 
     if (gwResponse?.success && gwResponse.data) {
@@ -102,31 +105,27 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Fetch user's weak concepts and past errors
-    const [metrics, recentSessions] = await Promise.all([
-      prisma.learningMetric.findUnique({ where: { userId } }).catch(() => null),
-      prisma.debugSession.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-      }).catch(() => []),
-    ]);
+    // Fetch user's debug history from DynamoDB
+    let recentSessions: Awaited<ReturnType<typeof getUserSessions>> = [];
+    try {
+      const allSessions = await getUserSessions(userId);
+      recentSessions = allSessions.slice(-20);
+    } catch { /* no history */ }
 
     // Build context for quiz generation
-    const weakConcepts = Array.isArray(metrics?.conceptWeaknesses)
-      ? (metrics.conceptWeaknesses as Array<{ concept: string; count: number }>).map(
-          (w) => w.concept
-        )
-      : [];
+    const weakConcepts = [...new Set(recentSessions.map((s) => s.conceptGap).filter(Boolean))];
 
-    const recurringMistakes = Array.isArray(metrics?.recurringMistakes)
-      ? (metrics.recurringMistakes as Array<{ errorType: string; count: number }>).map(
-          (m) => `${m.errorType} (${m.count}x)`
-        )
-      : [];
+    // Count error types for recurring mistakes
+    const errorCounts: Record<string, number> = {};
+    recentSessions.forEach((s) => {
+      errorCounts[s.errorType] = (errorCounts[s.errorType] || 0) + 1;
+    });
+    const recurringMistakes = Object.entries(errorCounts)
+      .filter(([, count]) => count > 1)
+      .map(([type, count]) => `${type} (${count}x)`);
 
     const pastErrorTypes = [...new Set(recentSessions.map((s) => s.errorType))];
-    const pastConceptGaps = [...new Set(recentSessions.map((s) => s.conceptGap))];
+    const pastConceptGaps = [...new Set(recentSessions.map((s) => s.conceptGap).filter(Boolean))];
 
     // Generate quiz with LLM
     const systemPrompt = `You are a programming instructor creating a personalized quiz.
@@ -221,20 +220,25 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Return user's learning metrics as quiz context
-    let metrics = null;
-    if (isDatabaseConfigured()) {
-      metrics = await prisma.learningMetric.findUnique({
-        where: { userId },
-      }).catch(() => null);
-    }
+    // Return user's learning stats from DynamoDB
+    let sessions: Awaited<ReturnType<typeof getUserSessions>> = [];
+    try {
+      sessions = await getUserSessions(userId);
+    } catch { /* no data */ }
+
+    const errorCounts: Record<string, number> = {};
+    const conceptCounts: Record<string, number> = {};
+    sessions.forEach((s) => {
+      errorCounts[s.errorType] = (errorCounts[s.errorType] || 0) + 1;
+      if (s.conceptGap) conceptCounts[s.conceptGap] = (conceptCounts[s.conceptGap] || 0) + 1;
+    });
 
     return NextResponse.json({
       success: true,
       stats: {
-        totalSessions: metrics?.totalSessions ?? 0,
-        weakConcepts: metrics?.conceptWeaknesses ?? [],
-        recurringMistakes: metrics?.recurringMistakes ?? [],
+        totalSessions: sessions.length,
+        weakConcepts: Object.entries(conceptCounts).map(([concept, count]) => ({ concept, count })),
+        recurringMistakes: Object.entries(errorCounts).map(([errorType, count]) => ({ errorType, count })),
       },
     });
   } catch (error) {

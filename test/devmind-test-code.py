@@ -34,17 +34,6 @@ print(f"Average score: {avg}")
 # Uncomment below and comment out Bug 1 to test
 # ──────────────────────────────────────────────────────────────
 
-# def find_pairs(arr, target):
-#     pairs = []
-#     for i in range(len(arr)):
-#         for j in range(i, len(arr)):    # BUG: should be i+1, not i
-#             if arr[i] + arr[j] == target:
-#                 pairs.append((arr[i], arr[j]))
-#     return pairs
-#
-# nums = [2, 7, 11, 15, 3, 6]
-# result = find_pairs(nums, 9)
-# print(f"Pairs that sum to 9: {result}")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -52,19 +41,19 @@ print(f"Average score: {avg}")
 # Uncomment below and comment out previous bugs to test
 # ──────────────────────────────────────────────────────────────
 
-# def process_user_data(users):
-#     report = ""
-#     for user in users:
-#         age_next_year = user["age"] + "1"    # BUG: concatenating str to int
-#         report += f"{user['name']} will be {age_next_year}\n"
-#     return report
-#
-# users = [
-#     {"name": "Alice", "age": 25},
-#     {"name": "Bob", "age": 30},
-#     {"name": "Charlie", "age": 22}
-# ]
-# print(process_user_data(users))
+def process_user_data(users):
+    report = ""
+    for user in users:
+        age_next_year = user["age"] + "1"    # BUG: concatenating str to int
+        report += f"{user['name']} will be {age_next_year}\n"
+    return report
+
+users = [
+     {"name": "Alice", "age": 25},
+     {"name": "Bob", "age": 30},
+     {"name": "Charlie", "age": 22}
+    ]
+print(process_user_data(users))
 
 
 # ──────────────────────────────────────────────────────────────

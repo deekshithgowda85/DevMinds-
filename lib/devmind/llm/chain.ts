@@ -4,6 +4,7 @@
 
 import { callLLMForJSON } from './groq';
 import { isGroqAvailable } from './groq';
+import { callBedrockForJSON, isBedrockConfigured } from './bedrock';
 import {
   buildDebugSystemPrompt,
   buildDebugUserMessage,
@@ -51,17 +52,23 @@ export async function debugWithMemory(
   const systemPrompt = buildDebugSystemPrompt(memoryContext);
   const userMessage = buildDebugUserMessage(language, code, errorMessage);
 
-  // Step 3: Call LLM
-  console.log('[Chain] Calling Groq LLM for debug analysis...');
+  // Step 3: Call LLM (Bedrock → Groq fallback)
+  console.log('[Chain] Calling AI for debug analysis...');
   let insight: LearningInsight;
   try {
-    if (!isGroqAvailable()) throw new Error('Groq not available');
-    const llmResult = await callLLMForJSON<LearningInsight>(
-      systemPrompt,
-      userMessage
-    );
-    if (!llmResult) throw new Error('LLM returned null');
-    insight = llmResult;
+    if (isBedrockConfigured()) {
+      console.log('[Chain] Using Bedrock (DeepSeek R1)...');
+      const llmResult = await callBedrockForJSON<LearningInsight>(systemPrompt, userMessage);
+      if (!llmResult) throw new Error('Bedrock returned null');
+      insight = llmResult;
+    } else if (isGroqAvailable()) {
+      console.log('[Chain] Using Groq fallback...');
+      const llmResult = await callLLMForJSON<LearningInsight>(systemPrompt, userMessage);
+      if (!llmResult) throw new Error('LLM returned null');
+      insight = llmResult;
+    } else {
+      throw new Error('No AI service available');
+    }
   } catch (llmError) {
     console.warn('[Chain] LLM unavailable, using pattern-based fallback:', (llmError as Error).message);
     insight = buildFallbackInsight(language, errorMessage);
@@ -183,8 +190,8 @@ export async function generateSmartDocs(
 
   const userMessage = buildDocsUserMessage(sessions, metricsSummary);
 
-  // Step 3: Call LLM
-  console.log('[Chain] Calling Groq LLM for SmartDocs report...');
+  // Step 3: Call LLM (Bedrock → Groq fallback)
+  console.log('[Chain] Calling AI for SmartDocs report...');
   let llmReport: {
     recurringMistakes: Array<{ errorType: string; count: number; trend: string; insight: string }>;
     conceptWeaknesses: Array<{ concept: string; severity: string; sessionsAffected: number; recommendation: string }>;
@@ -193,10 +200,19 @@ export async function generateSmartDocs(
     debugSpeedMetrics: { avgConfidence: number; trend: string; recurringErrorReduction: string };
   };
   try {
-    if (!isGroqAvailable()) throw new Error('Groq not available');
-    const result = await callLLMForJSON<typeof llmReport>(systemPrompt, userMessage);
-    if (!result) throw new Error('LLM returned null');
-    llmReport = result;
+    if (isBedrockConfigured()) {
+      console.log('[Chain] Using Bedrock (DeepSeek R1)...');
+      const result = await callBedrockForJSON<typeof llmReport>(systemPrompt, userMessage);
+      if (!result) throw new Error('Bedrock returned null');
+      llmReport = result;
+    } else if (isGroqAvailable()) {
+      console.log('[Chain] Using Groq fallback...');
+      const result = await callLLMForJSON<typeof llmReport>(systemPrompt, userMessage);
+      if (!result) throw new Error('LLM returned null');
+      llmReport = result;
+    } else {
+      throw new Error('No AI service available');
+    }
   } catch (llmErr) {
     console.warn('[Chain] LLM unavailable for SmartDocs, using data-only report:', (llmErr as Error).message);
     llmReport = {
@@ -305,8 +321,8 @@ export async function explainCode(request: {
   const systemPrompt = buildExplainSystemPrompt(weakConcepts);
   const userMessage = buildExplainUserMessage(language, code);
 
-  // Step 3: Call LLM
-  console.log('[Chain] Calling Groq LLM for code explanation...');
+  // Step 3: Call LLM (Bedrock → Groq fallback)
+  console.log('[Chain] Calling AI for code explanation...');
   let result: {
     title: string;
     overview: string;
@@ -316,10 +332,19 @@ export async function explainCode(request: {
     personalNotes: string[];
   };
   try {
-    if (!isGroqAvailable()) throw new Error('Groq not available');
-    const llmResult = await callLLMForJSON<typeof result>(systemPrompt, userMessage);
-    if (!llmResult) throw new Error('LLM returned null');
-    result = llmResult;
+    if (isBedrockConfigured()) {
+      console.log('[Chain] Using Bedrock (DeepSeek R1)...');
+      const llmResult = await callBedrockForJSON<typeof result>(systemPrompt, userMessage);
+      if (!llmResult) throw new Error('Bedrock returned null');
+      result = llmResult;
+    } else if (isGroqAvailable()) {
+      console.log('[Chain] Using Groq fallback...');
+      const llmResult = await callLLMForJSON<typeof result>(systemPrompt, userMessage);
+      if (!llmResult) throw new Error('LLM returned null');
+      result = llmResult;
+    } else {
+      throw new Error('No AI service available');
+    }
   } catch (llmErr) {
     console.warn('[Chain] LLM unavailable for explain, using fallback:', (llmErr as Error).message);
     result = {

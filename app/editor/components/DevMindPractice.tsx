@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
+import { useDevMindAuth } from "@/hooks/use-devmind-auth";
 
 interface QuizQuestion {
   id: number;
@@ -15,16 +16,8 @@ interface QuizQuestion {
 }
 
 export function DevMindPractice({ language }: { language: string }) {
-  const [userId] = useState(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("devmind-userId");
-      if (stored) return stored;
-      const id = "user-" + Math.random().toString(36).slice(2, 10);
-      localStorage.setItem("devmind-userId", id);
-      return id;
-    }
-    return "user-default";
-  });
+  const { user, guestName } = useDevMindAuth();
+  const userId = user?.username || guestName || 'anonymous';
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");

@@ -3,7 +3,7 @@
 // Returns user's debug history, learning metrics, and memory stats.
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma, isDatabaseConfigured } from '@/lib/devmind/database/postgres';
+import { getUserSessions } from '@/lib/devmind/aws/sessions';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,58 +16,59 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (!isDatabaseConfigured()) {
-      return NextResponse.json({
-        success: true,
-        userId,
-        totalSessions: 0,
-        recentSessions: [],
-        learningMetrics: null,
-        notice: 'Database not configured. Add a valid DATABASE_URL to .env.local.',
-      });
+    // Fetch sessions from DynamoDB
+    let sessions: Awaited<ReturnType<typeof getUserSessions>> = [];
+    try {
+      sessions = await getUserSessions(userId);
+    } catch (e) {
+      console.warn('[API/memory] DynamoDB fetch failed:', e instanceof Error ? e.message : e);
     }
 
-    // Fetch data in parallel
-    const [recentSessions, learningMetrics, totalCount] = await Promise.all([
-      prisma.debugSession.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-        select: {
-          id: true,
-          language: true,
-          codeSnippet: true,
-          errorMessage: true,
-          errorType: true,
-          conceptGap: true,
-          explanation: true,
-          fix: true,
-          confidenceLevel: true,
-          createdAt: true,
-        },
-      }),
-      prisma.learningMetric.findUnique({
-        where: { userId },
-      }),
-      prisma.debugSession.count({
-        where: { userId },
-      }),
-    ]);
+    // Compute metrics from sessions
+    const errorCounts: Record<string, number> = {};
+    const conceptCounts: Record<string, number> = {};
+    const confidenceHistory: number[] = [];
+
+    sessions.forEach((s) => {
+      errorCounts[s.errorType] = (errorCounts[s.errorType] || 0) + 1;
+      if (s.conceptGap) {
+        conceptCounts[s.conceptGap] = (conceptCounts[s.conceptGap] || 0) + 1;
+      }
+      confidenceHistory.push(s.confidenceLevel);
+    });
+
+    const avgConfidence = sessions.length > 0
+      ? sessions.reduce((sum, s) => sum + s.confidenceLevel, 0) / sessions.length
+      : 0;
+
+    const recentSessions = sessions.slice(-20).reverse().map((s, i) => ({
+      id: `session-${i}`,
+      language: s.language,
+      errorType: s.errorType,
+      conceptGap: s.conceptGap || null,
+      confidenceLevel: s.confidenceLevel,
+      createdAt: s.createdAt,
+    }));
 
     return NextResponse.json({
       success: true,
       userId,
-      totalSessions: totalCount,
+      totalSessions: sessions.length,
       recentSessions,
-      learningMetrics: learningMetrics
-        ? {
-            totalSessions: learningMetrics.totalSessions,
-            recurringMistakes: learningMetrics.recurringMistakes,
-            conceptWeaknesses: learningMetrics.conceptWeaknesses,
-            improvementMetrics: learningMetrics.improvementMetrics,
-            lastCalculated: learningMetrics.lastCalculated,
-          }
-        : null,
+      learningMetrics: sessions.length > 0 ? {
+        totalSessions: sessions.length,
+        recurringMistakes: Object.entries(errorCounts)
+          .map(([errorType, count]) => ({ errorType, count }))
+          .sort((a, b) => b.count - a.count),
+        conceptWeaknesses: Object.entries(conceptCounts)
+          .map(([concept, count]) => ({ concept, count }))
+          .sort((a, b) => b.count - a.count),
+        improvementMetrics: {
+          avgConfidence,
+          uniqueErrorTypes: Object.keys(errorCounts).length,
+          confidenceHistory: confidenceHistory.slice(-20),
+        },
+      } : null,
     });
   } catch (error: unknown) {
     console.error('[API/memory] Error:', error);

@@ -12,11 +12,11 @@ const TTL_SECONDS = 60 * 60 * 24; // 24 hours
 const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({ region: REGION }));
 
 /**
- * Generate deterministic SHA256 hash of code + error + actionType
+ * Generate deterministic SHA256 hash of language + code + error + actionType
  * Same input = same hash = cache hit (cost saving)
  */
-export function generateHash(code, error, actionType) {
-  const input = `${actionType}::${error || ''}::${code}`;
+export function generateHash(code, error, actionType, language) {
+  const input = `${actionType}::${language || ''}::${error || ''}::${code}`;
   return createHash('sha256').update(input).digest('hex');
 }
 

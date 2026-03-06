@@ -4,6 +4,9 @@
 /node_modules
 aws-lambda/node_modules
 aws-lambda/function.zip
+aws-lambda/lambda.zip
+aws-lambda/payload.json
+aws-lambda/result.json
 /.pnp
 .pnp.*
 .yarn/*

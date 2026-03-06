@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { useState } from 'react';
-import { useAuth } from '@/hooks/use-auth';
+import { useDevMindAuth } from '@/hooks/use-devmind-auth';
 
 interface SmartDocsReport {
   generatedAt: string;
@@ -16,15 +16,13 @@ interface SmartDocsReport {
 }
 
 export default function DocsPage() {
-  const { user } = useAuth();
+  const { user, guestName } = useDevMindAuth();
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<SmartDocsReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showMarkdown, setShowMarkdown] = useState(false);
 
-  const username = user?.isAnonymous
-    ? 'guest'
-    : user?.displayName || user?.email?.split('@')[0] || 'anonymous';
+  const username = user?.displayName || user?.username || guestName || 'anonymous';
 
   async function handleGenerate() {
     setLoading(true);

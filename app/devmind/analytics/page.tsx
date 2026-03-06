@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/hooks/use-auth';
+import { useDevMindAuth } from '@/hooks/use-devmind-auth';
 
 interface SessionStats {
   date: string;
@@ -22,14 +22,12 @@ interface AnalyticsData {
 }
 
 export default function AnalyticsPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, guestName } = useDevMindAuth();
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const username = user?.isAnonymous
-    ? 'guest'
-    : user?.displayName || user?.email?.split('@')[0] || 'anonymous';
+  const username = user?.displayName || user?.username || guestName || 'anonymous';
 
   const fetchAnalytics = async (uname: string) => {
     setLoading(true); setError('');
@@ -46,8 +44,8 @@ export default function AnalyticsPage() {
   };
 
   useEffect(() => {
-    if (!authLoading && user) fetchAnalytics(username);
-  }, [authLoading, user, username]);
+    if (!authLoading && (user || guestName)) fetchAnalytics(username);
+  }, [authLoading, user, guestName, username]);
 
   const summary = [
     { label: 'Total Sessions', value: analytics?.totalSessions ?? '-' },
@@ -72,7 +70,7 @@ export default function AnalyticsPage() {
             Learning insights for <span className="text-purple-400 font-mono">{username}</span>
           </p>
         </div>
-        {user && (
+        {(user || guestName) && (
           <button
             onClick={() => fetchAnalytics(username)}
             disabled={loading}
@@ -83,7 +81,7 @@ export default function AnalyticsPage() {
         )}
       </div>
 
-      {!user && !authLoading && (
+      {!user && !guestName && !authLoading && (
         <div className="p-6 rounded-xl bg-[#111] border border-[#222] text-center text-[#666]">
           Sign in to view your analytics.
         </div>

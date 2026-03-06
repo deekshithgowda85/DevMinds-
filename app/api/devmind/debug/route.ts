@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { debugWithMemory } from '@/lib/devmind/llm/chain';
 import { callGateway } from '@/lib/devmind/aws/gateway';
+import { storeDebugSession } from '@/lib/devmind/aws/sessions';
 
 export async function POST(request: NextRequest) {
   try {
@@ -57,9 +58,21 @@ export async function POST(request: NextRequest) {
     if (gwResponse?.success && gwResponse.data) {
       const d = gwResponse.data;
       const rawConf = typeof d.confidenceScore === 'number' ? d.confidenceScore : 0.5;
-      // Component expects 0-100 scale; Lambda returns 0-1 decimal
-      const confidenceLevel = rawConf <= 1 ? Math.round(rawConf * 100) : Math.round(rawConf);
+      // Normalize to 0-1 scale (consistent with Groq fallback)
+      const confidenceLevel = rawConf > 1 ? rawConf / 100 : rawConf;
       console.log(`[API/debug] AWS Gateway hit (cached: ${gwResponse.meta?.cached}, model: ${gwResponse.meta?.modelUsed})`);
+
+      // Store to DynamoDB for analytics (fire-and-forget)
+      storeDebugSession({
+        userId,
+        language,
+        errorType: (d.errorType as string) || 'Unknown',
+        conceptGap: (d.conceptGap as string) || '',
+        confidenceLevel,
+        explanation: (d.analysis as string) || (d.fixExplanation as string) || '',
+        fix: (d.suggestedFix as string) || '',
+      }).catch((e: unknown) => console.warn('[API/debug] DynamoDB store failed:', e instanceof Error ? e.message : e));
+
       return NextResponse.json({
         success: true,
         result: {

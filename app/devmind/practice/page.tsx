@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { useState } from 'react';
-import { useAuth } from '@/hooks/use-auth';
+import { useDevMindAuth } from '@/hooks/use-devmind-auth';
 
 interface QuizQuestion {
   id: number;
@@ -26,7 +26,7 @@ const diffBadge = (d: string) =>
   'bg-red-900/30 text-red-400 border-red-900/50';
 
 export default function PracticePage() {
-  const { user } = useAuth();
+  const { user, guestName } = useDevMindAuth();
   const [language, setLanguage] = useState('python');
   const [questionCount, setQuestionCount] = useState(5);
   const [quiz, setQuiz] = useState<QuizData | null>(null);
@@ -37,9 +37,7 @@ export default function PracticePage() {
   const [showResult, setShowResult] = useState<Record<number, boolean>>({});
   const [quizCompleted, setQuizCompleted] = useState(false);
 
-  const username = user?.isAnonymous
-    ? 'guest'
-    : user?.displayName || user?.email?.split('@')[0] || 'anonymous';
+  const username = user?.displayName || user?.username || guestName || 'anonymous';
 
   const generateQuiz = async () => {
     setLoading(true); setError(''); setQuiz(null);

@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { useState } from 'react';
-import { useAuth } from '@/hooks/use-auth';
+import { useDevMindAuth } from '@/hooks/use-devmind-auth';
 
 interface DebugResult {
   success: boolean;
@@ -25,7 +25,7 @@ interface DebugResult {
 const LANGUAGES = ['javascript','typescript','python','java','go','rust','c','cpp','csharp','ruby','php'];
 
 export default function DebugPage() {
-  const { user } = useAuth();
+  const { user, guestName } = useDevMindAuth();
   const [language, setLanguage] = useState('javascript');
   const [code, setCode] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -34,9 +34,7 @@ export default function DebugPage() {
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<DebugResult[]>([]);
 
-  const username = user?.isAnonymous
-    ? 'guest'
-    : user?.displayName || user?.email?.split('@')[0] || 'anonymous';
+  const username = user?.displayName || user?.username || guestName || 'anonymous';
 
   async function handleDebug() {
     if (!code.trim() || !errorMessage.trim()) {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useAuth } from '@/hooks/use-auth';
+import { useDevMindAuth } from '@/hooks/use-devmind-auth';
 import { Bug, FileText, BarChart2, BookOpen, Dumbbell } from 'lucide-react';
 
 interface MemoryStats {
@@ -27,14 +27,11 @@ interface MemoryStats {
 }
 
 export default function DevMindDashboard() {
-  const { user, loading } = useAuth();
+  const { user, loading, guestName } = useDevMindAuth();
   const [stats, setStats] = useState<MemoryStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
 
-  const username =
-    user?.isAnonymous
-      ? 'guest'
-      : user?.displayName || user?.email?.split('@')[0] || '';
+  const username = user?.displayName || user?.username || guestName || '';
 
   useEffect(() => {
     if (username) loadStats(username);

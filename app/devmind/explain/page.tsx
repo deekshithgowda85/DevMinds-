@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { useState } from 'react';
-import { useAuth } from '@/hooks/use-auth';
+import { useDevMindAuth } from '@/hooks/use-devmind-auth';
 
 interface CodeSection {
   lineRange: string;
@@ -42,7 +42,7 @@ const complexCfg: Record<string, { label: string; color: string }> = {
 };
 
 export default function ExplainPage() {
-  const { user } = useAuth();
+  const { user, guestName } = useDevMindAuth();
   const [code, setCode] = useState('');
   const [language, setLanguage] = useState('javascript');
   const [loading, setLoading] = useState(false);
@@ -50,9 +50,7 @@ export default function ExplainPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedSection, setExpandedSection] = useState<number | null>(null);
 
-  const username = user?.isAnonymous
-    ? 'guest'
-    : user?.displayName || user?.email?.split('@')[0] || 'anonymous';
+  const username = user?.displayName || user?.username || guestName || 'anonymous';
 
   async function handleExplain() {
     if (!code.trim()) return;
