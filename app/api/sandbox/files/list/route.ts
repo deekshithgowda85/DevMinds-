@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSandboxInstance } from '@/lib/sandbox-instances';
+import { getOrReconnectSandbox } from '@/lib/sandbox-instances';
+
+export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,7 +20,7 @@ export async function GET(request: NextRequest) {
     }
 
     console.log('[list files] Getting sandbox instance for sessionId:', sessionId);
-    const sandbox = getSandboxInstance(sessionId);
+    const sandbox = await getOrReconnectSandbox(sessionId);
     
     if (!sandbox) {
       console.error('[list files] Sandbox not found for sessionId:', sessionId);

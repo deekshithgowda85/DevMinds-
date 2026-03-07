@@ -1,5 +1,36 @@
 import { E2BSandboxManager } from './e2b-sandbox';
 
+/**
+ * Gets a sandbox from the in-memory cache, or reconnects to the existing E2B
+ * sandbox by ID if the cache is empty (happens on every Vercel cold start).
+ * The sessionId MUST be the E2B sandboxId so reconnection is possible.
+ */
+export async function getOrReconnectSandbox(sessionId: string): Promise<E2BSandboxManager | null> {
+  // Try in-memory cache first (works when the same lambda handles the request)
+  const cached = getSandboxInstance(sessionId);
+  if (cached) {
+    console.log('[getOrReconnect] Cache hit for:', sessionId);
+    return cached;
+  }
+
+  // Cache miss — reconnect to the already-running E2B sandbox
+  const apiKey = process.env.E2B_API_KEY;
+  if (!apiKey) {
+    console.error('[getOrReconnect] E2B_API_KEY not set');
+    return null;
+  }
+
+  try {
+    console.log('[getOrReconnect] Reconnecting to E2B sandbox:', sessionId);
+    const sandbox = await E2BSandboxManager.reconnect(sessionId, apiKey);
+    setSandboxInstance(sessionId, sandbox);
+    return sandbox;
+  } catch (error) {
+    console.error('[getOrReconnect] Failed to reconnect:', error);
+    return null;
+  }
+}
+
 // Use globalThis to ensure the Map persists across Next.js hot reloads and serverless invocations
 // This is a workaround for Next.js API routes not sharing module state
 declare global {
