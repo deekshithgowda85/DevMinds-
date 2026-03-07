@@ -35,8 +35,14 @@ export function useE2BSandbox() {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to initialize sandbox');
+        let errorMessage = `Sandbox API error (${response.status})`;
+        try {
+          const data = await response.json();
+          errorMessage = data.error || errorMessage;
+        } catch {
+          // Response body was empty or non-JSON (e.g. Vercel 500 with no body)
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
