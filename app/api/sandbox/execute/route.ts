@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSandboxInstance } from '@/lib/sandbox-instances';
+import { getOrReconnectSandbox } from '@/lib/sandbox-instances';
+
+export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,7 +14,7 @@ export async function POST(request: NextRequest) {
     // Handle direct command execution
     if (sessionId && command) {
       console.log('[execute] Executing command:', command);
-      const sandbox = getSandboxInstance(sessionId);
+      const sandbox = await getOrReconnectSandbox(sessionId);
       
       if (!sandbox) {
         console.error('[execute] Sandbox not found for sessionId:', sessionId);
@@ -37,7 +40,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('[execute] Getting sandbox instance for sessionId:', sessionId);
-    const sandbox = getSandboxInstance(sessionId);
+    const sandbox = await getOrReconnectSandbox(sessionId);
     
     if (!sandbox) {
       console.error('[execute] Sandbox not found for sessionId:', sessionId);
@@ -61,4 +64,18 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function OPTIONS() {
+  return NextResponse.json(
+    { message: 'OK' },
+    {
+      status: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    }
+  );
 }

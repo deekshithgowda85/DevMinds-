@@ -407,4 +407,18 @@ export class E2BSandboxManager {
   getSandboxId(): string | null {
     return this.sandbox?.sandboxId || null;
   }
+
+  static async reconnect(sandboxId: string, apiKey: string): Promise<E2BSandboxManager> {
+    const manager = new E2BSandboxManager(apiKey);
+    try {
+      manager.sandbox = await Sandbox.connect(sandboxId, { apiKey });
+      console.log('[E2BSandboxManager] Reconnected to sandbox:', sandboxId);
+    } catch (error) {
+      console.error('[E2BSandboxManager] Failed to reconnect to sandbox:', error);
+      throw new Error(
+        `Failed to reconnect to sandbox: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+    return manager;
+  }
 }

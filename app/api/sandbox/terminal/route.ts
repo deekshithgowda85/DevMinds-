@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSandboxInstance } from '@/lib/sandbox-instances';
+import { getOrReconnectSandbox } from '@/lib/sandbox-instances';
+
+export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,7 +16,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const sandbox = getSandboxInstance(sessionId);
+    const sandbox = await getOrReconnectSandbox(sessionId);
     if (!sandbox) {
       return NextResponse.json(
         { error: 'Sandbox session not found' },
@@ -59,4 +62,18 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function OPTIONS() {
+  return NextResponse.json(
+    { message: 'OK' },
+    {
+      status: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    }
+  );
 }
