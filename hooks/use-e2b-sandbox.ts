@@ -21,6 +21,28 @@ export interface FileOperation {
   error?: string;
 }
 
+/**
+ * Safely parse a response as JSON. Returns parsed data or throws a
+ * descriptive error when the body is empty / non-JSON (e.g. Vercel timeout).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function safeJson<T = any>(response: Response): Promise<T> {
+  const text = await response.text();
+  if (!text) {
+    throw new Error(
+      `Server returned empty response (HTTP ${response.status}). ` +
+      'The serverless function may have timed out.'
+    );
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(
+      `Server returned non-JSON response (HTTP ${response.status}): ${text.slice(0, 200)}`
+    );
+  }
+}
+
 export function useE2BSandbox() {
   const [session, setSession] = useState<SandboxSession | null>(null);
   const [loading, setLoading] = useState(false);
@@ -34,12 +56,12 @@ export function useE2BSandbox() {
         method: 'POST',
       });
 
+      const data = await safeJson(response);
+
       if (!response.ok) {
-        const data = await response.json();
         throw new Error(data.error || 'Failed to initialize sandbox');
       }
 
-      const data = await response.json();
       setSession({
         sessionId: data.sessionId,
         sandboxId: data.sandboxId,
@@ -90,7 +112,7 @@ export function useE2BSandbox() {
           }),
         });
 
-        const data = await response.json();
+        const data = await safeJson(response);
         if (!response.ok) {
           throw new Error(data.error || 'Execution failed');
         }
@@ -125,7 +147,7 @@ export function useE2BSandbox() {
           }),
         });
 
-        const data = await response.json();
+        const data = await safeJson(response);
         if (!response.ok) {
           throw new Error(data.error || 'Command execution failed');
         }
@@ -163,7 +185,7 @@ export function useE2BSandbox() {
           }),
         });
 
-        const data = await response.json();
+        const data = await safeJson(response);
         console.log('writeFile response:', { ok: response.ok, data });
         
         if (!response.ok) {
@@ -196,7 +218,7 @@ export function useE2BSandbox() {
           `/api/sandbox/files?sessionId=${session.sessionId}&path=${encodeURIComponent(path)}`
         );
 
-        const data = await response.json();
+        const data = await safeJson(response);
         if (!response.ok) {
           throw new Error(data.error || 'Failed to read file');
         }
@@ -227,7 +249,7 @@ export function useE2BSandbox() {
           { method: 'DELETE' }
         );
 
-        const data = await response.json();
+        const data = await safeJson(response);
         if (!response.ok) {
           throw new Error(data.error || 'Failed to delete file');
         }
@@ -257,7 +279,7 @@ export function useE2BSandbox() {
           `/api/sandbox/files/list?sessionId=${session.sessionId}&path=${encodeURIComponent(path)}`
         );
 
-        const data = await response.json();
+        const data = await safeJson(response);
         if (!response.ok) {
           throw new Error(data.error || 'Failed to list files');
         }
@@ -294,7 +316,7 @@ export function useE2BSandbox() {
           }),
         });
 
-        const data = await response.json();
+        const data = await safeJson(response);
         if (!response.ok) {
           throw new Error(data.error || 'Failed to clone repository');
         }
@@ -331,7 +353,7 @@ export function useE2BSandbox() {
           }),
         });
 
-        const data = await response.json();
+        const data = await safeJson(response);
         if (!response.ok) {
           throw new Error(data.error || 'Failed to commit');
         }
@@ -369,7 +391,7 @@ export function useE2BSandbox() {
           }),
         });
 
-        const data = await response.json();
+        const data = await safeJson(response);
         if (!response.ok) {
           throw new Error(data.error || 'Failed to push');
         }
@@ -407,7 +429,7 @@ export function useE2BSandbox() {
           }),
         });
 
-        const data = await response.json();
+        const data = await safeJson(response);
         if (!response.ok) {
           throw new Error(data.error || 'Failed to pull');
         }
