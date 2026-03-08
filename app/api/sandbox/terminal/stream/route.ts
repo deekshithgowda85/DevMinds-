@@ -1,5 +1,5 @@
-import { NextRequest } from 'next/server';
-import { getSandboxInstance } from '@/lib/sandbox-instances';
+import { NextRequest, NextResponse } from 'next/server';
+import { getOrReconnectSandbox, getSandboxInstance } from '@/lib/sandbox-instances';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     return new Response('Missing sessionId', { status: 400 });
   }
 
-  const sandbox = getSandboxInstance(sessionId);
+  const sandbox = await getOrReconnectSandbox(sessionId);
   if (!sandbox) {
     return new Response('Sandbox not found', { status: 404 });
   }
@@ -79,6 +79,21 @@ export async function GET(request: NextRequest) {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
     },
   });
+}
+
+export async function OPTIONS() {
+  return NextResponse.json(
+    { message: 'OK' },
+    {
+      status: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET,OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    }
+  );
 }
