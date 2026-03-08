@@ -14,10 +14,12 @@ export interface ExecutionResult {
   actualPath?: string; // For git clone: the actual path where repo was cloned
 }
 
+// Template ID for deekshiharsha2185/codedebugger — visible in E2B dashboard
+const E2B_TEMPLATE_ID = '94e6x6bza518cmqygprc';
+
 export class E2BSandboxManager {
   private sandbox: Sandbox | null = null;
   private apiKey: string;
-  private templateId: string = 'codedebugger';
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
@@ -29,14 +31,16 @@ export class E2BSandboxManager {
     }
 
     try {
-      this.sandbox = await Sandbox.create(this.templateId, {
+      this.sandbox = await Sandbox.create(E2B_TEMPLATE_ID, {
         apiKey: this.apiKey,
         timeoutMs: 10 * 60 * 1000, // 10 minutes timeout
       });
       console.log('E2B Sandbox initialized:', this.sandbox.sandboxId);
     } catch (error) {
       console.error('Failed to initialize E2B sandbox:', error);
-      throw new Error('Failed to initialize sandbox');
+      // Preserve the original error message so callers can surface it
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to initialize sandbox: ${msg}`);
     }
   }
 
@@ -406,5 +410,19 @@ export class E2BSandboxManager {
 
   getSandboxId(): string | null {
     return this.sandbox?.sandboxId || null;
+  }
+
+  static async reconnect(sandboxId: string, apiKey: string): Promise<E2BSandboxManager> {
+    const manager = new E2BSandboxManager(apiKey);
+    try {
+      manager.sandbox = await Sandbox.connect(sandboxId, { apiKey });
+      console.log('[E2BSandboxManager] Reconnected to sandbox:', sandboxId);
+    } catch (error) {
+      console.error('[E2BSandboxManager] Failed to reconnect to sandbox:', error);
+      throw new Error(
+        `Failed to reconnect to sandbox: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+    return manager;
   }
 }

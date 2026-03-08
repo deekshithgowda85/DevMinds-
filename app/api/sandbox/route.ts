@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { E2BSandboxManager } from '@/lib/e2b-sandbox';
-import { setSandboxInstance, getSandboxInstance, deleteSandboxInstance } from '@/lib/sandbox-instances';
+import { setSandboxInstance, getOrReconnectSandbox, deleteSandboxInstance } from '@/lib/sandbox-instances';
+
+export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 export async function POST() {
   try {
@@ -15,19 +18,18 @@ export async function POST() {
       );
     }
 
-    const sessionId = crypto.randomUUID();
-    console.log('Generated sessionId:', sessionId);
-    
     const sandbox = new E2BSandboxManager(apiKey);
     await sandbox.initialize();
-    console.log('Sandbox initialized with ID:', sandbox.getSandboxId());
+    const sandboxId = sandbox.getSandboxId()!;
+    console.log('Sandbox initialized with ID:', sandboxId);
 
-    setSandboxInstance(sessionId, sandbox);
+    // Key the cache by the E2B sandboxId so sub-routes can reconnect on Vercel cold starts
+    setSandboxInstance(sandboxId, sandbox);
     console.log('Sandbox instance stored in map');
 
     return NextResponse.json({
-      sessionId,
-      sandboxId: sandbox.getSandboxId(),
+      sessionId: sandboxId,   // use sandboxId as sessionId for reconnect support
+      sandboxId,
       message: 'Sandbox initialized successfully',
     });
   } catch (error) {
@@ -37,6 +39,20 @@ export async function POST() {
       { status: 500 }
     );
   }
+}
+
+export async function OPTIONS() {
+  return NextResponse.json(
+    { message: 'OK' },
+    {
+      status: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    }
+  );
 }
 
 export async function DELETE(request: NextRequest) {
@@ -51,7 +67,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const sandbox = getSandboxInstance(sessionId);
+    const sandbox = await getOrReconnectSandbox(sessionId);
     if (sandbox) {
       await sandbox.close();
       deleteSandboxInstance(sessionId);
