@@ -40,7 +40,12 @@ export function useE2BSandbox() {
           const data = await response.json();
           errorMessage = data.error || errorMessage;
         } catch {
-          // Response body was empty or non-JSON (e.g. Vercel 500 with no body)
+          // Response body was empty or non-JSON
+          if (response.status === 405) {
+            errorMessage = 'Sandbox API is not available in this deployment (HTTP 405). Ensure E2B_API_KEY is set in Vercel environment variables.';
+          } else if (response.status === 504 || response.status === 524) {
+            errorMessage = 'Sandbox initialization timed out. E2B sandbox requires a Vercel Pro plan (60s function timeout).';
+          }
         }
         throw new Error(errorMessage);
       }

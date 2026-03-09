@@ -1,0 +1,67 @@
+DevMinds — Prototype Performance & Benchmarking
+
+Purpose
+- Provide a concise benchmark plan and acceptance thresholds for the prototype.
+- Use these tests to validate latency, throughput, concurrency, and resource use before production.
+
+Assumptions
+- Staging environment mirrors production infra (CloudFront + Lambda / ECS + Aurora Serverless).
+- Test dataset: realistic user accounts and content (seed DB with ~10k rows).
+- Region: US East (N. Virginia)
+
+Key Metrics
+- P95 / P99 latency (ms) for API endpoints and SSR page renders
+- Median (P50) latency (ms)
+- Requests per second (RPS) sustained for 5–15 minutes
+- Error rate (%) and HTTP 5xx counts
+- Cold-start frequency & cold-start latency (for serverless)
+- DB query latency and transactions per second (TPS)
+- CPU / memory and network egress during peak tests
+
+Test Scenarios
+1) Smoke: 20 concurrent users, 2 min — sanity check
+2) Baseline: 100 concurrent users, steady 10 minutes — baseline latency & RPS
+3) Peak: 500 concurrent users, 10–15 minutes — observe autoscale & errors
+4) Spike: sudden jump from 50 → 1000 concurrent users — test resilience
+5) DB stress: run heavy read/write mix against Prisma queries
+6) Cache effectiveness: same tests with/without CDN & Redis cache
+7) Cold starts: repeated function cold-start sampling (serverless)
+
+Tools & Example Commands
+- k6 (recommended): simple scripting + metrics export
+  - Install: `brew install k6` or download from https://k6.io
+  - Example run: k6 run --vus 100 --duration 10m script.js
+- wrk (lightweight load): wrk -t12 -c400 -d300s https://staging.example.com/api/endpoint
+- artillery (JS-based scenarios): artillery quick --count 100 -n 1000 https://staging.example.com
+- Locust (Python, user-behavior): locust -f locustfile.py --headless -u 200 -r 10 --run-time 10m
+
+Sample k6 metrics to collect (JSON output):
+- http_req_duration (ms)
+- http_reqs (count)
+- checks (pass/fail)
+
+DB Benchmarking
+- Measure single-query latency and multi-connection TPS with pgbench (Postgres-compatible) or a synthetic Prisma script.
+- Test connection pooling behavior (Prisma pool size) under concurrency.
+- Track slow-query counts and DB CPU/IO.
+
+Acceptable Thresholds (example)
+- P95 latency (API): < 300 ms
+- P99 latency (API): < 800 ms
+- Error rate: < 0.5%
+- Sustained RPS (prototype target): 200–500 RPS depending on routes
+- DB 95th percentile query: < 200 ms
+
+Reporting & Artifacts
+- Store raw k6/wrk/locust output (JSON/CSV) and generate summary charts.
+- Capture CloudWatch (or Grafana) metrics for CPU/memory, ALB/Lambda concurrency, and DB metrics.
+- Produce a short summary: tests run, environment, key metrics, pass/fail vs thresholds.
+
+Quick checklist before testing
+- Ensure staging uses same caching/CDN settings as prod.
+- Seed realistic data and user flows.
+- Disable noisy background jobs during tests.
+- Enable detailed metrics export and log retention for test window.
+
+Prepared for: DevMinds
+Date: March 6, 2026

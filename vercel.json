@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "app/api/sandbox/**": {
+      "maxDuration": 60
+    }
+  }
+}
