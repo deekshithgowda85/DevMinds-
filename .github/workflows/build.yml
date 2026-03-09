@@ -50,6 +50,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # ── 3a. Fix cross-platform native bindings ─────────────────
+      # package-lock.json is generated on Windows and only contains the Windows
+      # @tailwindcss/oxide binary. npm ci reproduces the lock exactly, so the
+      # Linux native binding is missing. Force-install it for this runner.
+      # Once the lock file is regenerated locally (after .npmrc was added), this
+      # step becomes a no-op because the binary will already be present.
+      - name: Install Linux native bindings (cross-platform fix)
+        if: runner.os == 'Linux'
+        run: |
+          npm install --no-save \
+            @tailwindcss/oxide-linux-x64-gnu@4.1.18 \
+            @tailwindcss/oxide-linux-x64-musl@4.1.18
+
       # ── 4. Generate Prisma client ──────────────────────────────
       - name: Generate Prisma client
         run: npx prisma generate
